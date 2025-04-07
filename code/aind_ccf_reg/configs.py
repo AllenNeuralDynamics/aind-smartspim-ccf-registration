@@ -64,7 +64,7 @@ class RegSchema(ArgSchema):
             "description": "Path to the template-to-ccf transform",
         },
     )
-    
+
     ccf_to_template_transform_path = sch_list(
         cls_or_instance=Str,
         metadata={

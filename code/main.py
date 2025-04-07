@@ -43,7 +43,7 @@ def main() -> None:
 
     # Getting highest wavelenght as default for registration
     channel_to_register = sorted_channels[-1]
-    additional_channels = pipeline_config['segmentation']['channels']
+    additional_channels = pipeline_config["segmentation"]["channels"]
 
     results_folder = f"../results/ccf_{channel_to_register}"
     create_folder(results_folder)
@@ -100,7 +100,7 @@ def main() -> None:
         template_to_ccf_transform_affine_path,
     ]
     print(f"template_to_ccf_transform_path: {template_to_ccf_transform_path}")
-    
+
     ccf_to_template_transform_warp_path = os.path.abspath(
         "../data/lightsheet_template_ccf_registration/syn_1InverseWarp.nii.gz"
     )
@@ -109,9 +109,9 @@ def main() -> None:
         template_to_ccf_transform_affine_path,
         ccf_to_template_transform_warp_path,
     ]
-    
+
     print(f"ccf_to_template_transform_path: {ccf_to_template_transform_path}")
-    
+
     ccf_annotation_to_template_moved_path = os.path.abspath(
         "../data/lightsheet_template_ccf_registration/ccf_annotation_to_template_moved.nii.gz"
     )
@@ -143,8 +143,10 @@ def main() -> None:
 
     # ---------------------------------------------------#
 
-    regions = read_json_as_dict('../code/aind_ccf_reg/ccf_files/annotation_map.json')
-    precompute_path = os.path.abspath('../results/ccf_annotation_precomputed')
+    regions = read_json_as_dict(
+        "../code/aind_ccf_reg/ccf_files/annotation_map.json"
+    )
+    precompute_path = os.path.abspath("../results/ccf_annotation_precomputed")
     create_folder(precompute_path)
     create_folder(f"{precompute_path}/segment_properties")
 
@@ -201,7 +203,7 @@ def main() -> None:
             "compressor": "zstd",
             "chunks": (64, 64, 64),
         },
-        "ng_params":{
+        "ng_params": {
             "save_path": precompute_path,
             "regions": regions,
             "scale_params": {
@@ -209,9 +211,9 @@ def main() -> None:
                 "compressed_block": [16, 16, 16],
                 "chunk_size": [32, 32, 32],
                 "factors": [2, 2, 2],
-                "num_scales": 3
-            }
-        }
+                "num_scales": 3,
+            },
+        },
     }
 
     logger.info(f"Input parameters in CCF run: {example_input}")
