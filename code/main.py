@@ -43,6 +43,7 @@ def main() -> None:
 
     # Getting highest wavelenght as default for registration
     channel_to_register = sorted_channels[-1]
+    additional_channels = pipeline_config["segmentation"]["channels"]
 
     results_folder = f"../results/ccf_{channel_to_register}"
     create_folder(results_folder)
@@ -100,6 +101,17 @@ def main() -> None:
     ]
     print(f"template_to_ccf_transform_path: {template_to_ccf_transform_path}")
 
+    ccf_to_template_transform_warp_path = os.path.abspath(
+        "../data/lightsheet_template_ccf_registration/syn_1InverseWarp.nii.gz"
+    )
+
+    ccf_to_template_transform_path = [
+        template_to_ccf_transform_affine_path,
+        ccf_to_template_transform_warp_path,
+    ]
+
+    print(f"ccf_to_template_transform_path: {ccf_to_template_transform_path}")
+
     ccf_annotation_to_template_moved_path = os.path.abspath(
         "../data/lightsheet_template_ccf_registration/ccf_annotation_to_template_moved.nii.gz"
     )
@@ -128,17 +140,29 @@ def main() -> None:
         raise FileNotFoundError(
             "ccf_annotation_to_template_moved_path not exist, please provide valid path"
         )
+
+    # ---------------------------------------------------#
+
+    regions = read_json_as_dict(
+        "../code/aind_ccf_reg/ccf_files/annotation_map.json"
+    )
+    precompute_path = os.path.abspath("../results/ccf_annotation_precomputed")
+    create_folder(precompute_path)
+    create_folder(f"{precompute_path}/segment_properties")
+
     # ---------------------------------------------------#
 
     example_input = {
         "input_data": "../data/fused",
         "input_channel": channel_to_register,
+        "additional_channels": additional_channels,
         "input_scale": pipeline_config["registration"]["input_scale"],
         "input_orientation": acquisition_orientation,
         "bucket_path": "aind-open-data",
         "template_path": template_path,  # SPIM template
         "ccf_reference_path": ccf_reference_path,
         "template_to_ccf_transform_path": template_to_ccf_transform_path,
+        "ccf_to_template_transform_path": ccf_to_template_transform_path,
         "ccf_annotation_to_template_moved_path": ccf_annotation_to_template_moved_path,
         "reference_res": 25,
         "output_data": os.path.abspath(f"{results_folder}/OMEZarr"),
@@ -161,7 +185,7 @@ def main() -> None:
             "percNorm_path": f"{reg_folder}/prep_percNorm.nii.gz",
         },
         "ants_params": {
-            "spacing": (0.0144, 0.0144, 0.016),
+            "spacing": (0.016, 0.0144, 0.0144),
             "unit": "millimetre",
             "template_orientations": {
                 "anterior_to_posterior": 1,
@@ -178,6 +202,17 @@ def main() -> None:
             "clevel": 1,
             "compressor": "zstd",
             "chunks": (64, 64, 64),
+        },
+        "ng_params": {
+            "save_path": precompute_path,
+            "regions": regions,
+            "scale_params": {
+                "encoding": "compresso",
+                "compressed_block": [16, 16, 16],
+                "chunk_size": [32, 32, 32],
+                "factors": [2, 2, 2],
+                "num_scales": 3,
+            },
         },
     }
 

@@ -65,6 +65,38 @@ class RegSchema(ArgSchema):
         },
     )
 
+    ccf_to_template_transform_path = sch_list(
+        cls_or_instance=Str,
+        metadata={
+            "required": True,
+            "description": "Path to the ccf-to-template transform",
+        },
+    )
+
+    additional_channels = sch_list(
+        cls_or_instance=Str,
+        metadata={
+            "required": True,
+            "description": "list of additional channels to register",
+        },
+    )
+
+    ccf_to_template_transform_path = sch_list(
+        cls_or_instance=Str,
+        metadata={
+            "required": True,
+            "description": "Path to the ccf-to-template transform",
+        },
+    )
+
+    additional_channels = sch_list(
+        cls_or_instance=Str,
+        metadata={
+            "required": True,
+            "description": "list of additional channels to register",
+        },
+    )
+
     ccf_annotation_to_template_moved_path = Str(
         metadata={
             "required": True,
@@ -121,6 +153,13 @@ class RegSchema(ArgSchema):
         metadata={
             "required": True,
             "description": "ants registering parameters",
+        }
+    )
+
+    ng_params = sch_dict(
+        metadata={
+            "required": True,
+            "description": "neuroglancer precompute parameters",
         }
     )
 

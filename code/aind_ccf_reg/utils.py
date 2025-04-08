@@ -9,6 +9,7 @@ import os
 import platform
 import time
 from datetime import datetime
+from glob import glob
 from pathlib import Path
 from typing import List, Optional, Union
 
@@ -16,9 +17,11 @@ import matplotlib.pyplot as plt
 import numpy as np
 import psutil
 import pydantic
+import scipy.ndimage as ndi
 from aind_ccf_reg.configs import PathLike
 from aind_data_schema.core.processing import (DataProcess, PipelineProcess,
                                               Processing)
+from cloudvolume import CloudVolume
 
 
 def create_logger(output_log_path: PathLike) -> logging.Logger:
@@ -136,6 +139,44 @@ def read_json_from_pydantic(
     return json_data
 
 
+def get_channel_translations(
+    translation_params: dict,
+    channel_to_register: str,
+) -> list:
+    """
+    Identifies all the imaging channels in a dataset
+
+    Parameters
+    ----------
+    translation_params: dict
+        list of channels from processing manifest
+    channel_to_register: str
+        channel that is being used for registration
+
+    Returns
+    -------
+    list
+        list of channels formated: Ex_*_Em_*
+
+    """
+
+    additional_channels = []
+    if "excitation" in translation_params.keys():
+        ex_wavelengths = translation_params["excitation"]
+        em_wavelengths = translation_params["emmission"]
+
+        for ex, em in zip(ex_wavelengths, em_wavelengths):
+            channel = f"Ex_{ex}_Em_{em}"
+            if channel != channel_to_register:
+                additional_channels.append(f"Ex_{ex}_Em_{em}")
+    else:
+        for key, channel in translation_params.items():
+            if channel != channel_to_register:
+                additional_channels.append(channel)
+
+    return additional_channels
+
+
 def generate_processing(
     data_processes: List[DataProcess],
     dest_processing: PathLike,
@@ -180,6 +221,46 @@ def generate_processing(
     processing.write_standard_file(output_directory=dest_processing)
 
 
+def rotate_image(img: np.array, in_mat: np.array, reverse: bool):
+    """
+    Rotates axes of a volume based on orientation matrix.
+
+    Parameters
+    ----------
+    img: np.array
+        Image volume to be rotated
+    in_mat: np.array
+        3x3 matrix with cols indicating order of input array and rows
+        indicating location to rotate axes into
+
+    Returns
+    -------
+    img_out: np.array
+        Image after being rotated into new orientation
+    out_mat: np.array
+        axes correspondance after rotating array. Should always be an
+        identity matrix
+    reverse: bool
+        if you are doing forward or reverse registration
+
+    """
+
+    if not reverse:
+        in_mat = in_mat.T
+
+    original, swapped = np.where(in_mat)
+    img_out = np.moveaxis(img, original, swapped)
+
+    out_mat = in_mat[:, swapped]
+    for c, row in enumerate(in_mat):
+        val = np.where(row)[0][0]
+        if row[val] == -1:
+            img_out = np.flip(img_out, c)
+            out_mat[val, val] *= -1
+
+    return img_out, out_mat
+
+
 def check_orientation(img: np.array, params: dict, orientations: dict):
     """
     Checks aquisition orientation an makes sure it is aligned to the CCF. The
@@ -191,7 +272,7 @@ def check_orientation(img: np.array, params: dict, orientations: dict):
     Parameters
     ----------
     img : np.array
-        The raw image in its aquired orientatin
+        The raw image in its aquired orientation
     params : dict
         The orientation information from processing_manifest.json
     orientations: dict
@@ -224,17 +305,188 @@ def check_orientation(img: np.array, params: dict, orientations: dict):
     if "".join(acronym) == "spl":
         orient_mat = abs(orient_mat)
 
-    original, swapped = np.where(orient_mat)
-    img_out = np.moveaxis(img, original, swapped)
-
-    out_mat = orient_mat[:, swapped]
-    for c, row in enumerate(orient_mat.T):
-        val = np.where(row)[0][0]
-        if row[val] == -1:
-            img_out = np.flip(img_out, c)
-            out_mat[val, val] *= -1
+    img_out, out_mat = rotate_image(img, orient_mat, False)
 
     return img_out, orient_mat, out_mat
+
+
+class create_precomputed:
+    def __init__(self, ng_params):
+        self.regions = ng_params["regions"]
+        self.scaling = ng_params["scale_params"]
+        self.save_path = ng_params["save_path"]
+
+    def save_json(self, fpath: str, info: dict):
+        """
+        Saves information jsons for precomputed format
+
+        Parameters
+        ----------
+        fpath: str
+            full file path to where the data will be saved
+        info: dict
+            data to be saved to file
+        """
+
+        path = f"{fpath}/info"
+
+        with open(path, "w") as fp:
+            json.dump(info, fp, indent=2)
+
+        return
+
+    def create_segmentation_info(self):
+        """
+        Builds formating for additional info file for segmentation
+        precomuted defining the segmentation regions from CCFv3 and
+        save to json
+        """
+
+        json_data = {
+            "@type": "neuroglancer_segment_properties",
+            "inline": {
+                "ids": [str(k) for k in self.regions.keys()],
+                "properties": [
+                    {
+                        "id": "label",
+                        "type": "label",
+                        "values": [str(v) for k, v in self.regions.items()],
+                    }
+                ],
+            },
+        }
+
+        fpath = f"{self.save_path}/segment_properties"
+        self.save_json(fpath, json_data)
+
+        return
+
+    def build_scales(self):
+        """
+        Creates the scaling information for segmentation precomputed
+        info file
+
+        Return
+        ------
+        scales: dict
+            The resolution scales of the segmentation precomputed
+            pyramid
+        """
+
+        scales = []
+        for s in range(self.scaling["num_scales"]):
+            scale = {
+                "chunk_sizes": [self.scaling["chunk_size"]],
+                "encoding": self.scaling["encoding"],
+                "compressed_segmentation_block_size": self.scaling[
+                    "compressed_block"
+                ],
+                "key": "_".join(
+                    [
+                        str(int(r * f**s))
+                        for r, f in zip(
+                            self.scaling["res"], self.scaling["factors"]
+                        )
+                    ]
+                ),
+                "resolution": [
+                    int(r * f**s)
+                    for r, f in zip(
+                        self.scaling["res"], self.scaling["factors"]
+                    )
+                ],
+                "size": [
+                    int(d // f**s)
+                    for d, f in zip(
+                        self.scaling["dims"], self.scaling["factors"]
+                    )
+                ],
+            }
+            scales.append(scale)
+
+        return scales
+
+    def build_precomputed_info(self):
+        """
+        builds info dictionary for segmentation precomputed info file
+
+        Returns
+        -------
+        info: dict
+            information dictionary for creating info file
+
+        """
+        info = {
+            "type": "segmentation",
+            "segment_properties": "segment_properties",
+            "data_type": "uint32",
+            "num_channels": 1,
+            "scales": self.build_scales(),
+        }
+
+        self.save_json(self.save_path, info)
+
+        return info
+
+    def volume_info(self, scale: int, shape: tuple):
+        """
+        Builds information for each scale of precomputed parymid
+
+        Returns
+        -------
+        info: Cloudvolume Object
+            All the scaling information for an individual level
+        """
+
+        info = CloudVolume.create_new_info(
+            num_channels=1,
+            layer_type="segmentation",
+            data_type="uint32",
+            encoding=self.scaling["encoding"],
+            resolution=[
+                int(r * f**scale)
+                for r, f in zip(self.scaling["res"], self.scaling["factors"])
+            ],
+            voxel_offset=[0, 0, 0],
+            chunk_size=self.scaling["chunk_size"],
+            volume_size=[dim for dim in shape],
+        )
+
+        return info
+
+    def create_segment_precomputed(self, img: np.array):
+        """
+        Creates segmentation precomputed pyramid and saves files
+
+        Parameters
+        ----------
+        img: np.array
+            The image that is being converted to a precomputed format
+        """
+
+        for scale in range(self.scaling["num_scales"]):
+            if scale == 0:
+                curr_img = img
+            else:
+                factor = [1 / 2**scale for d in img.shape]
+                curr_img = ndi.zoom(img, tuple(factor), order=0)
+
+            info = self.volume_info(scale, curr_img.shape)
+            vol = CloudVolume(
+                f"file://{self.save_path}", info=info, compress=False
+            )
+            vol[:, :, :] = curr_img.astype("uint32")
+
+        return
+
+    def cleanup_seg_files(self):
+        files = glob(f"{self.save_path}/**/*.br", recursive=True)
+
+        for file in files:
+            new_file = file[:-3]
+            os.rename(file, new_file)
+
+        return
 
 
 def profile_resources(
@@ -398,20 +650,24 @@ def get_code_ocean_cpu_limit():
         return co_cpus
     if aws_batch_job_id:
         return 1
-    
+
     try:
         with open("/sys/fs/cgroup/cpu/cpu.cfs_quota_us") as fp:
             cfs_quota_us = int(fp.read())
         with open("/sys/fs/cgroup/cpu/cpu.cfs_period_us") as fp:
             cfs_period_us = int(fp.read())
-        
+
         container_cpus = cfs_quota_us // cfs_period_us
 
     except FileNotFoundError as e:
         container_cpus = 0
 
     # For physical machine, the `cfs_quota_us` could be '-1'
-    return psutil.cpu_count(logical=False) if container_cpus < 1 else container_cpus
+    return (
+        psutil.cpu_count(logical=False)
+        if container_cpus < 1
+        else container_cpus
+    )
 
 
 def print_system_information(logger: logging.Logger):
