@@ -26,5 +26,6 @@ RUN pip install -U --no-cache-dir \
     matplotlib==3.7.3 \
     ome-zarr==0.8.2 \
     natsort==8.4.0 \
+    crackle-codec==0.26.0 \
     aicsimageio@git+https://github.com/camilolaiton/aicsimageio.git@feature/zarrwriter-multiscales-daskjobs \
     awscli
