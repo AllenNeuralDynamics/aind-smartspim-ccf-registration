@@ -1,12 +1,42 @@
-FROM continuumio/miniconda3:23.9.0-0
+FROM condaforge/miniforge3:latest
+
+# --------------------- #
+#      METADATA         #
+# --------------------- #
+LABEL maintainer="Camilo Laiton <camilo.laiton@alleninstitute.org>" \
+      org.opencontainers.image.title="Image Atlas Registration" \
+      org.opencontainers.image.description="Container for registration of lightsheet images to the Allen CCF V3 atlas" \
+      org.opencontainers.image.version="0.0.31" \
+      org.opencontainers.image.licenses="MIT"
 
 ARG DEBIAN_FRONTEND=noninteractive
 
-RUN apt-get update && conda create -n ccf_reg python=3.8 -y
+# --------------------- #
+#   SYSTEM DEPENDENCIES #
+# --------------------- #
+RUN apt-get update && \
+    apt-get upgrade -y --no-install-recommends build-essential && \
+    apt-get install -y --no-install-recommends gcc g++ && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+# --------------------- #
+#     CONDA ENV SETUP   #
+# --------------------- #
+RUN conda create -n ccf_reg python=3.8 --yes && \
+    conda clean --all --yes
+
+# --------------------- #
+#     ENVIRONMENT PATH  #
+# --------------------- #
+ENV PATH="/opt/conda/envs/ccf_reg/bin:$PATH"
 
 # Make RUN commands use the new environment:
 SHELL ["conda", "run", "-n", "ccf_reg", "/bin/bash", "-c"]
 
+# --------------------- #
+#     PYTHON PACKAGES   #
+# --------------------- #
 RUN pip install -U --no-cache-dir \
     antspyx==0.4.2 \
     argschema==3.0.4 \
@@ -22,5 +52,6 @@ RUN pip install -U --no-cache-dir \
     matplotlib==3.7.3 \
     ome-zarr==0.8.2 \
     natsort==8.4.0 \
+    crackle-codec==0.26.0 \
     aicsimageio@git+https://github.com/camilolaiton/aicsimageio.git@feature/zarrwriter-multiscales-daskjobs \
     awscli
