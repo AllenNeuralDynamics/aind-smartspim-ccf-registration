@@ -1,43 +1,20 @@
-FROM condaforge/miniforge3:latest
-
-# --------------------- #
-#      METADATA         #
-# --------------------- #
-LABEL maintainer="Camilo Laiton <camilo.laiton@alleninstitute.org>" \
-      org.opencontainers.image.title="Image Atlas Registration" \
-      org.opencontainers.image.description="Container for registration of lightsheet images to the Allen CCF V3 atlas" \
-      org.opencontainers.image.version="0.0.31" \
-      org.opencontainers.image.licenses="MIT"
+# ------------------- #
+#   Stage 1: Builder  #
+# ------------------- #
+FROM condaforge/miniforge3:latest as builder
 
 ARG DEBIAN_FRONTEND=noninteractive
+ENV CONDA_ENV=ccf_reg
+ENV PATH=/opt/conda/envs/$CONDA_ENV/bin:$PATH
 
-# --------------------- #
-#   SYSTEM DEPENDENCIES #
-# --------------------- #
+# Install only what's needed to build packages (temporarily)
 RUN apt-get update && \
-    apt-get upgrade -y --no-install-recommends build-essential && \
-    apt-get install -y --no-install-recommends gcc g++ && \
-    apt-get clean && \
+    apt-get install -y --no-install-recommends gcc g++ build-essential && \
     rm -rf /var/lib/apt/lists/*
 
-# --------------------- #
-#     CONDA ENV SETUP   #
-# --------------------- #
-RUN conda create -n ccf_reg python=3.8 --yes && \
-    conda clean --all --yes
-
-# --------------------- #
-#     ENVIRONMENT PATH  #
-# --------------------- #
-ENV PATH="/opt/conda/envs/ccf_reg/bin:$PATH"
-
-# Make RUN commands use the new environment:
-SHELL ["conda", "run", "-n", "ccf_reg", "/bin/bash", "-c"]
-
-# --------------------- #
-#     PYTHON PACKAGES   #
-# --------------------- #
-RUN pip install -U --no-cache-dir \
+# Create env and install packages
+RUN conda create -n $CONDA_ENV python=3.8 -y && \
+    /opt/conda/envs/$CONDA_ENV/bin/pip install -U --no-cache-dir \
     antspyx==0.4.2 \
     argschema==3.0.4 \
     s3fs==2022.11.0 \
@@ -54,4 +31,24 @@ RUN pip install -U --no-cache-dir \
     natsort==8.4.0 \
     crackle-codec==0.26.0 \
     aicsimageio@git+https://github.com/camilolaiton/aicsimageio.git@feature/zarrwriter-multiscales-daskjobs \
-    awscli
+    awscli && \
+    conda clean --all --yes
+
+# ------------------- #
+#   Stage 2: Runtime  #
+# ------------------- #
+FROM condaforge/miniforge3:latest
+
+LABEL maintainer="Camilo Laiton <camilo.laiton@alleninstitute.org>" \
+    org.opencontainers.image.title="Image Atlas Registration" \
+    org.opencontainers.image.description="Container for registration of lightsheet images to the Allen CCF V3 atlas" \
+    org.opencontainers.image.version="0.0.31" \
+    org.opencontainers.image.licenses="MIT"
+
+ENV CONDA_ENV=ccf_reg
+ENV PATH=/opt/conda/envs/$CONDA_ENV/bin:$PATH
+
+# Copy env from builder
+COPY --from=builder /opt/conda /opt/conda
+
+CMD ["bash"]
