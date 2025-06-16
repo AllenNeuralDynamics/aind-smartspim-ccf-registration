@@ -8,6 +8,7 @@ Pipeline:
 (4) register CCF annotation to brain space
 """
 
+import gc
 import logging
 import multiprocessing
 import os
@@ -39,7 +40,7 @@ from aind_ccf_reg.preprocess import (Preprocess, invert_perc_normalization,
                                      perc_normalization, write_and_plot_image)
 from aind_ccf_reg.utils import (check_orientation, create_folder,
                                 create_precomputed, generate_processing,
-                                rotate_image)
+                                get_available_memory, rotate_image)
 
 LOG_FMT = "%(asctime)s %(message)s"
 LOG_DATE_FMT = "%Y-%m-%d %H:%M"
@@ -958,13 +959,18 @@ class Register(ArgSchemaParser):
         # Using 1 thread since is in single machine.
         # Avoiding the use of multithreaded due to GIL
 
+        available_memory_gbs = get_available_memory()
+        print(f"Available memory for local cluster: {available_memory_gbs}")
+
         cluster = LocalCluster(
             n_workers=n_workers,
             threads_per_worker=threads_per_worker,
             processes=True,
-            memory_limit="auto",
+            memory_limit=f"{available_memory_gbs}GB",
         )
+        print(f"Local cluster: {cluster}")
         client = Client(cluster)
+        client.run(gc.collect)
 
         writer = OmeZarrWriter(output_path)
 

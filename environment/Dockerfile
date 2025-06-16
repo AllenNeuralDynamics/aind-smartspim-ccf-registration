@@ -29,3 +29,5 @@ RUN pip install -U --no-cache-dir \
     crackle-codec==0.26.0 \
     aicsimageio@git+https://github.com/camilolaiton/aicsimageio.git@feature/zarrwriter-multiscales-daskjobs \
     awscli
+
+ENV MALLOC_TRIM_THRESHOLD_=0

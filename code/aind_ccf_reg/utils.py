@@ -24,6 +24,27 @@ from aind_data_schema.core.processing import (DataProcess, PipelineProcess,
 from cloudvolume import CloudVolume
 
 
+def get_available_memory():
+    """
+    Returns the available memory in GBs.
+
+    Returns
+    -------
+    int
+        Available memory in GBs
+    """
+    available_memory_bytes = os.environ.get("CO_MEMORY", None)
+
+    if available_memory_bytes is not None:
+        available_memory_bytes = int(available_memory_bytes)
+    else:
+        # Use psutil to get available virtual memory in bytes
+        available_memory_bytes = psutil.virtual_memory().available
+
+    available_memory_gb = available_memory_bytes / (1024**3)
+    return available_memory_gb
+
+
 def create_logger(output_log_path: PathLike) -> logging.Logger:
     """
     Creates a logger that generates output logs to a specific path.
