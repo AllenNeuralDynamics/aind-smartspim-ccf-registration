@@ -962,11 +962,13 @@ class Register(ArgSchemaParser):
         available_memory_gbs = get_available_memory()
         print(f"Available memory for local cluster: {available_memory_gbs}")
 
+        per_worker_memory_gb = available_memory_gbs / n_workers
+
         cluster = LocalCluster(
             n_workers=n_workers,
             threads_per_worker=threads_per_worker,
             processes=True,
-            memory_limit=f"{available_memory_gbs}GB",
+            memory_limit=f"{per_worker_memory_gb}GB",
         )
         print(f"Local cluster: {cluster}")
         client = Client(cluster)
