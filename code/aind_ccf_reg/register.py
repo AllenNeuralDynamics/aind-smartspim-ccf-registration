@@ -796,7 +796,7 @@ class Register(ArgSchemaParser):
 
         return
 
-    def additional_channal_alignment(
+    def additional_channel_alignment(
         self,
         img_array: np.array,
         ants_params: dict,
@@ -1196,7 +1196,7 @@ class Register(ArgSchemaParser):
 
             img_array = self.__read_zarr_image(image_path)
 
-            aligned_image = self.additional_channal_alignment(
+            aligned_image = self.additional_channel_alignment(
                 img_array, ants_params
             )
 
