@@ -29,12 +29,12 @@ def main() -> None:
 
     if pipeline_config is None:
         raise ValueError("Please, provide a valid processing manifest")
-        
+
     registration_info = pipeline_config.get("registration")
 
     if registration_info is None:
         raise ValueError("Please, provide registration channels.")
-        
+
     channels_to_process = registration_info.get("channels")
 
     # Note: The dispatcher capsule creates a single config with
@@ -44,7 +44,7 @@ def main() -> None:
 
         acquisition_json = read_json_as_dict(acquisition_path)
         acquisition_orientation = acquisition_json.get("axes")
-    
+
         if acquisition_orientation is None:
             raise ValueError(
                 f"Please, provide a valid acquisition orientation, acquisition: {acquisition_json}"
@@ -52,36 +52,36 @@ def main() -> None:
 
         # Setting parameters based on pipeline
         sorted_channels = natsorted(channels_to_process)
-    
+
         # Getting highest wavelenght as default for registration
         channel_to_register = sorted_channels[-1]
         additional_channels = pipeline_config["segmentation"]["channels"]
-    
+
         results_folder = f"../results/ccf_{channel_to_register}"
         create_folder(results_folder)
-        
+
         metadata_folder = os.path.abspath(f"{results_folder}/metadata")
         reg_folder = os.path.abspath(
             f"{metadata_folder}/registration_metadata"
         )
         create_folder(reg_folder)
         create_folder(metadata_folder)
-    
+
         logger = create_logger(output_log_path=reg_folder)
         logger.info(
             f"Processing manifest {pipeline_config} provided in path {processing_manifest_path}"
         )
         logger.info(f"channel_to_register: {channel_to_register}")
-    
+
         utils.print_system_information(logger)
-    
+
         # Tracking compute resources
         # Subprocess to track used resources
         manager = multiprocessing.Manager()
         time_points = manager.list()
         cpu_percentages = manager.list()
         memory_usages = manager.list()
-    
+
         profile_process = multiprocessing.Process(
             target=utils.profile_resources,
             args=(
@@ -93,9 +93,9 @@ def main() -> None:
         )
         profile_process.daemon = True
         profile_process.start()
-    
+
         logger.info(f"{'='*40} SmartSPIM CCF Registration {'='*40}")
-    
+
         # ---------------------------------------------------#
         # path to SPIM template, CCF and template-to-CCF registration
         template_path = os.path.abspath(
@@ -117,58 +117,62 @@ def main() -> None:
         print(
             f"template_to_ccf_transform_path: {template_to_ccf_transform_path}"
         )
-    
+
         ccf_to_template_transform_warp_path = os.path.abspath(
             "../data/lightsheet_template_ccf_registration/syn_1InverseWarp.nii.gz"
         )
-    
+
         ccf_to_template_transform_path = [
             template_to_ccf_transform_affine_path,
             ccf_to_template_transform_warp_path,
         ]
-    
-        print(f"ccf_to_template_transform_path: {ccf_to_template_transform_path}")
-    
+
+        print(
+            f"ccf_to_template_transform_path: {ccf_to_template_transform_path}"
+        )
+
         ccf_annotation_to_template_moved_path = os.path.abspath(
             "../data/lightsheet_template_ccf_registration/ccf_annotation_to_template_moved.nii.gz"
         )
-    
+
         if not os.path.isfile(template_path):
             raise FileNotFoundError(
                 "template_path not exist, please provide valid path to SPIM template"
             )
-    
+
         if not os.path.isfile(ccf_reference_path):
             raise FileNotFoundError(
                 "ccf_reference_path not exist, please provide valid path to CCF atlas"
             )
-    
+
         if not os.path.isfile(template_to_ccf_transform_warp_path):
             raise FileNotFoundError(
                 "template_to_ccf_transform_warp_path not exist, please provide valid path"
             )
-    
+
         if not os.path.isfile(template_to_ccf_transform_affine_path):
             raise FileNotFoundError(
                 "template_to_ccf_transform_affine_path not exist, please provide valid path"
             )
-    
+
         if not os.path.isfile(ccf_annotation_to_template_moved_path):
             raise FileNotFoundError(
                 "ccf_annotation_to_template_moved_path not exist, please provide valid path"
             )
-    
+
         # ---------------------------------------------------#
-    
+
         regions = read_json_as_dict(
             "../code/aind_ccf_reg/ccf_files/annotation_map.json"
         )
-        precompute_path = os.path.abspath("../results/ccf_annotation_precomputed")
+        precompute_path = os.path.abspath(
+            "../results/ccf_annotation_precomputed"
+        )
         create_folder(precompute_path)
         create_folder(f"{precompute_path}/segment_properties")
-    
+
         # ---------------------------------------------------#
-    
+
         example_input = {
             "input_data": "../data/fused",
             "input_channel": channel_to_register,
@@ -232,16 +236,16 @@ def main() -> None:
                 },
             },
         }
-    
+
         logger.info(f"Input parameters in CCF run: {example_input}")
         # flake8: noqa: F841
         image_path = register.main(example_input)
-    
+
         logger.info(f"Saving outputs to: {image_path}")
-    
+
         # Getting tracked resources and plotting image
         utils.stop_child_process(profile_process)
-    
+
         if len(time_points):
             utils.generate_resources_graphs(
                 time_points,
@@ -250,7 +254,7 @@ def main() -> None:
                 metadata_folder,
                 "smartspim_ccf_registration",
             )
-            
+
     else:
         print(f"No registration channel, pipeline config: {pipeline_config}")
         results_folder = "../results"

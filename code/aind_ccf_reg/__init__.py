@@ -1,7 +1,6 @@
-"""CCF Registration package.
-"""
+"""CCF Registration package."""
 
-__version__ = "0.0.31"
+__version__ = "0.0.32"
 
 __authors__ = [
     "Camilo Laiton",
