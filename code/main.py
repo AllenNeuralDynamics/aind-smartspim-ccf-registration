@@ -19,7 +19,7 @@ def main() -> None:
     processing_manifest_path = f"{data_folder}/processing_manifest.json"
     acquisition_path = f"{data_folder}/acquisition.json"
 
-    print("Data folder:", os.listdir(data_folder))
+    print("Data folder:", os.listdir(data_folder), " List: ", os.listdir(f"{data_folder}/lightsheet_template_ccf_registration"))
     
     if not os.path.exists(processing_manifest_path):
         raise ValueError("Processing manifest path does not exist!")
