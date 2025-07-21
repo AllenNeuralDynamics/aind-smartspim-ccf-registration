@@ -34,7 +34,7 @@ def get_estimated_downsample(
 
     downsample_versions = []
     for idx in range(len(voxel_resolution)):
-        downsample_versions.append(registration_res[idx] // voxel_resolution[idx])
+        downsample_versions.append(registration_res[idx] // float(voxel_resolution[idx]))
 
     downsample_res = int(min(downsample_versions) - 1)
     return downsample_res
