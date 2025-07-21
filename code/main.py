@@ -8,6 +8,36 @@ import os
 from aind_ccf_reg import register, utils
 from aind_ccf_reg.utils import create_folder, create_logger, read_json_as_dict
 from natsort import natsorted
+from typing import List, Tuple
+
+def get_estimated_downsample(
+    voxel_resolution: List[float], registration_res: Tuple[float] = (16.0, 14.4, 14.4)
+) -> int:
+    """
+    Get the estimated multiscale based on the provided
+    voxel resolution. This is used for image stitching.
+
+    e.g., if the original resolution is (1.8. 1.8, 2.0)
+    in XYZ order, and you provide (3.6, 3.6, 4.0) as
+    image resolution, then the picked resolution will be
+    1.
+
+    Parameters
+    ----------
+    voxel_resolution: List[float]
+        Image original resolution. This would be the resolution
+        in the multiscale "0".
+    registration_res: Tuple[float]
+        Approximated resolution that was used for registration
+        in the computation of the transforms. Default: (16.0, 14.4, 14.4)
+    """
+
+    downsample_versions = []
+    for idx in range(len(voxel_resolution)):
+        downsample_versions.append(registration_res[idx] // voxel_resolution[idx])
+
+    downsample_res = int(min(downsample_versions) - 1)
+    return downsample_res
 
 
 def main() -> None:
@@ -33,11 +63,18 @@ def main() -> None:
     acquisition_json = read_json_as_dict(acquisition_path)
     acquisition_orientation = acquisition_json.get("axes")
 
+
     if acquisition_orientation is None:
         raise ValueError(
             f"Please, provide a valid acquisition orientation, acquisition: {acquisition_json}"
         )
-
+    
+    #calculate downsample for registration
+    acquisition_res = acquisition_json["tiles"][0]['coordinate_transformations'][1]['scale']
+    reg_scale = get_estimated_downsample(acquisition_res)
+    reg_res = [float(res)/(reg_scale * 1000) for res in acquisition_res]
+    
+    
     # Setting parameters based on pipeline
     sorted_channels = natsorted(pipeline_config["registration"]["channels"])
 
@@ -156,7 +193,7 @@ def main() -> None:
         "input_data": "../data/fused",
         "input_channel": channel_to_register,
         "additional_channels": additional_channels,
-        "input_scale": pipeline_config["registration"]["input_scale"],
+        "input_scale": reg_scale,
         "input_orientation": acquisition_orientation,
         "bucket_path": "aind-open-data",
         "template_path": template_path,  # SPIM template
@@ -185,7 +222,7 @@ def main() -> None:
             "percNorm_path": f"{reg_folder}/prep_percNorm.nii.gz",
         },
         "ants_params": {
-            "spacing": (0.016, 0.0144, 0.0144),
+            "spacing": tuple(reg_res),
             "unit": "millimetre",
             "template_orientations": {
                 "anterior_to_posterior": 1,
