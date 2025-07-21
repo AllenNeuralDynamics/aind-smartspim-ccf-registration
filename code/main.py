@@ -15,9 +15,12 @@ def main() -> None:
     Main function to register a dataset
     """
     data_folder = os.path.abspath("../data")
+    results_path = os.path.abspath("../results")
     processing_manifest_path = f"{data_folder}/processing_manifest.json"
     acquisition_path = f"{data_folder}/acquisition.json"
 
+    print("Data folder:", os.listdir(data_folder))
+    
     if not os.path.exists(processing_manifest_path):
         raise ValueError("Processing manifest path does not exist!")
 
@@ -99,16 +102,16 @@ def main() -> None:
         # ---------------------------------------------------#
         # path to SPIM template, CCF and template-to-CCF registration
         template_path = os.path.abspath(
-            "../data/lightsheet_template_ccf_registration/smartspim_lca_template_25.nii.gz"
+            f"{data_folder}/lightsheet_template_ccf_registration/smartspim_lca_template_25.nii.gz"
         )
         ccf_reference_path = os.path.abspath(
-            "../data/lightsheet_template_ccf_registration/ccf_average_template_25.nii.gz"
+            f"{data_folder}/lightsheet_template_ccf_registration/ccf_average_template_25.nii.gz"
         )
         template_to_ccf_transform_warp_path = os.path.abspath(
-            "../data/lightsheet_template_ccf_registration/spim_template_to_ccf_syn_1Warp.nii.gz"
+            f"{data_folder}/lightsheet_template_ccf_registration/spim_template_to_ccf_syn_1Warp.nii.gz"
         )
         template_to_ccf_transform_affine_path = os.path.abspath(
-            "../data/lightsheet_template_ccf_registration/spim_template_to_ccf_syn_0GenericAffine.mat"
+            f"{data_folder}/lightsheet_template_ccf_registration/spim_template_to_ccf_syn_0GenericAffine.mat"
         )
         template_to_ccf_transform_path = [
             template_to_ccf_transform_warp_path,
@@ -119,7 +122,7 @@ def main() -> None:
         )
 
         ccf_to_template_transform_warp_path = os.path.abspath(
-            "../data/lightsheet_template_ccf_registration/syn_1InverseWarp.nii.gz"
+            f"{data_folder}/lightsheet_template_ccf_registration/syn_1InverseWarp.nii.gz"
         )
 
         ccf_to_template_transform_path = [
@@ -132,32 +135,32 @@ def main() -> None:
         )
 
         ccf_annotation_to_template_moved_path = os.path.abspath(
-            "../data/lightsheet_template_ccf_registration/ccf_annotation_to_template_moved.nii.gz"
+            f"{data_folder}/lightsheet_template_ccf_registration/ccf_annotation_to_template_moved.nii.gz"
         )
 
         if not os.path.isfile(template_path):
             raise FileNotFoundError(
-                "template_path not exist, please provide valid path to SPIM template"
+                f"template_path {template_path} not exist, please provide valid path to SPIM template"
             )
 
         if not os.path.isfile(ccf_reference_path):
             raise FileNotFoundError(
-                "ccf_reference_path not exist, please provide valid path to CCF atlas"
+                f"ccf_reference_path {ccf_reference_path} not exist, please provide valid path to CCF atlas"
             )
 
         if not os.path.isfile(template_to_ccf_transform_warp_path):
             raise FileNotFoundError(
-                "template_to_ccf_transform_warp_path not exist, please provide valid path"
+                f"template_to_ccf_transform_warp_path {template_to_ccf_transform_warp_path} not exist, please provide valid path"
             )
 
         if not os.path.isfile(template_to_ccf_transform_affine_path):
             raise FileNotFoundError(
-                "template_to_ccf_transform_affine_path not exist, please provide valid path"
+                f"template_to_ccf_transform_affine_path {template_to_ccf_transform_affine_path} not exist, please provide valid path"
             )
 
         if not os.path.isfile(ccf_annotation_to_template_moved_path):
             raise FileNotFoundError(
-                "ccf_annotation_to_template_moved_path not exist, please provide valid path"
+                f"ccf_annotation_to_template_moved_path {ccf_annotation_to_template_moved_path} not exist, please provide valid path"
             )
 
         # ---------------------------------------------------#
@@ -166,7 +169,7 @@ def main() -> None:
             "../code/aind_ccf_reg/ccf_files/annotation_map.json"
         )
         precompute_path = os.path.abspath(
-            "../results/ccf_annotation_precomputed"
+            f"{results_path}/ccf_annotation_precomputed"
         )
         create_folder(precompute_path)
         create_folder(f"{precompute_path}/segment_properties")
@@ -174,7 +177,7 @@ def main() -> None:
         # ---------------------------------------------------#
 
         example_input = {
-            "input_data": "../data/fused",
+            "input_data": f"{data_folder}/fused",
             "input_channel": channel_to_register,
             "additional_channels": additional_channels,
             "input_scale": pipeline_config["registration"]["input_scale"],
@@ -257,7 +260,7 @@ def main() -> None:
 
     else:
         print(f"No registration channel, pipeline config: {pipeline_config}")
-        results_folder = "../results"
+        results_folder = f"{results_path}"
         utils.save_dict_as_json(
             filename=f"{results_folder}/registration_processing_manifest_empty.json",
             dictionary=pipeline_config,
