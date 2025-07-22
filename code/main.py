@@ -12,14 +12,14 @@ from aind_ccf_reg.utils import create_folder, create_logger, read_json_as_dict
 from natsort import natsorted
 from typing import List, Tuple
 
-def get_zarr_metadata(uri):
+def get_zarr_metadata(zarr_path):
     """
     Opens a ZARR file and retrieves its metadata.
 
     Parameters
     ----------
-    uri : str
-        URI of the ZARR file.
+    zarr_path : str
+        file path to zarr file.
 
     Returns
     -------
@@ -29,7 +29,7 @@ def get_zarr_metadata(uri):
         Metadata of the ZARR file.
     """
 
-    store = zarr.DirectoryStore(local_path)
+    store = zarr.DirectoryStore(zarr_path)
     reader = Reader(store)
 
     # nodes may include images, labels etc
@@ -108,9 +108,7 @@ def main() -> None:
     additional_channels = pipeline_config["segmentation"]["channels"]
 
     #calculate downsample for registration
-    zarr_path = image_path = Path(image_folder).joinpath(
-        f"{channel_to_register}.zarr/
-    )
+    zarr_path = os.path.join(image_folder, f"{channel_to_register}.zarr/")
     _, acquisition_metadata = get_zarr_metadata(zarr_path)
     acquisition_res = acquisition_metadata['coordinateTransformations'][0][0]['scale'][2:]
     reg_scale = get_estimated_downsample(acquisition_res)
