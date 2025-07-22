@@ -4,11 +4,41 @@ Main used in code ocean to execute capsule
 
 import multiprocessing
 import os
+import zarr
+from ome_zarr.reader import Reader
 
 from aind_ccf_reg import register, utils
 from aind_ccf_reg.utils import create_folder, create_logger, read_json_as_dict
 from natsort import natsorted
 from typing import List, Tuple
+
+def get_zarr_metadata(uri):
+    """
+    Opens a ZARR file and retrieves its metadata.
+
+    Parameters
+    ----------
+    uri : str
+        URI of the ZARR file.
+
+    Returns
+    -------
+    image_node : ome_zarr.reader.Node
+        The image node of the ZARR file.
+    zarr_meta : dict
+        Metadata of the ZARR file.
+    """
+
+    store = zarr.DirectoryStore(local_path)
+    reader = Reader(store)
+
+    # nodes may include images, labels etc
+    nodes = list(reader())
+
+    # first node will be the image pixel data
+    image_node = nodes[0]
+    zarr_meta = image_node.metadata
+    return image_node, zarr_meta
 
 def get_estimated_downsample(
     voxel_resolution: List[float], registration_res: Tuple[float] = (16.0, 14.4, 14.4)
@@ -45,6 +75,7 @@ def main() -> None:
     Main function to register a dataset
     """
     data_folder = os.path.abspath("../data")
+    image_folder = os.path.abspath("../data/fused")
     processing_manifest_path = f"{data_folder}/processing_manifest.json"
     acquisition_path = f"{data_folder}/acquisition.json"
 
@@ -68,20 +99,22 @@ def main() -> None:
         raise ValueError(
             f"Please, provide a valid acquisition orientation, acquisition: {acquisition_json}"
         )
-    
-    #calculate downsample for registration
-    acquisition_res = acquisition_json["tiles"][0]['coordinate_transformations'][1]['scale']
-    reg_scale = get_estimated_downsample(acquisition_res)
-    reg_res = [float(res)/(reg_scale * 1000) for res in acquisition_res]
-    
-    
+        
     # Setting parameters based on pipeline
-    print(pipeline_config)
     sorted_channels = natsorted(pipeline_config["registration"]["channels"])
 
     # Getting highest wavelenght as default for registration
     channel_to_register = sorted_channels[-1]
     additional_channels = pipeline_config["segmentation"]["channels"]
+
+    #calculate downsample for registration
+    zarr_path = image_path = Path(image_folder).joinpath(
+        f"{channel_to_register}.zarr/
+    )
+    _, acquisition_metadata = get_zarr_metadata(zarr_path)
+    acquisition_res = acquisition_metadata['coordinateTransformations'][0][0]['scale'][2:]
+    reg_scale = get_estimated_downsample(acquisition_res)
+    reg_res = [float(res)/(reg_scale * 1000) for res in acquisition_res]
 
     results_folder = f"../results/ccf_{channel_to_register}"
     create_folder(results_folder)
@@ -191,7 +224,7 @@ def main() -> None:
     # ---------------------------------------------------#
 
     example_input = {
-        "input_data": "../data/fused",
+        "input_data": image_folder,
         "input_channel": channel_to_register,
         "additional_channels": additional_channels,
         "input_scale": reg_scale,
