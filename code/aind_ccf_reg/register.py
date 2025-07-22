@@ -955,7 +955,7 @@ class Register(ArgSchemaParser):
         # Writing OMEZarr image
 
         # Pulling number of available workers in Code Ocean or SLURM
-        n_workers = get_cpu_limit()
+        n_workers = int(get_cpu_limit())
 
         threads_per_worker = 1
         # Using 1 thread since is in single machine.
