@@ -76,6 +76,7 @@ def main() -> None:
     
     
     # Setting parameters based on pipeline
+    print(pipeline_config)
     sorted_channels = natsorted(pipeline_config["registration"]["channels"])
 
     # Getting highest wavelenght as default for registration
