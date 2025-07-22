@@ -19,7 +19,7 @@ def main() -> None:
     processing_manifest_path = f"{data_folder}/processing_manifest.json"
     acquisition_path = f"{data_folder}/acquisition.json"
 
-    print("Data folder:", os.listdir(data_folder), " List: ", os.listdir(f"{data_folder}/lightsheet_template_ccf_registration"))
+    print("Data folder:", os.listdir(data_folder))
     
     if not os.path.exists(processing_manifest_path):
         raise ValueError("Processing manifest path does not exist!")
@@ -108,10 +108,10 @@ def main() -> None:
             f"{data_folder}/lightsheet_template_ccf_registration/ccf_average_template_25.nii.gz"
         )
         template_to_ccf_transform_warp_path = os.path.abspath(
-            f"{data_folder}/lightsheet_template_ccf_registration/spim_template_to_ccf_syn_1Warp.nii.gz"
+            f"{data_folder}/lightsheet_template_ccf_registration/spim_template_to_ccf_syn_1Warp_25.nii.gz"
         )
         template_to_ccf_transform_affine_path = os.path.abspath(
-            f"{data_folder}/lightsheet_template_ccf_registration/spim_template_to_ccf_syn_0GenericAffine.mat"
+            f"{data_folder}/lightsheet_template_ccf_registration/spim_template_to_ccf_syn_0GenericAffine_25.mat"
         )
         template_to_ccf_transform_path = [
             template_to_ccf_transform_warp_path,
@@ -122,7 +122,7 @@ def main() -> None:
         )
 
         ccf_to_template_transform_warp_path = os.path.abspath(
-            f"{data_folder}/lightsheet_template_ccf_registration/syn_1InverseWarp.nii.gz"
+            f"{data_folder}/lightsheet_template_ccf_registration/spim_template_to_ccf_syn_1InverseWarp_25.nii.gz"
         )
 
         ccf_to_template_transform_path = [
@@ -135,7 +135,7 @@ def main() -> None:
         )
 
         ccf_annotation_to_template_moved_path = os.path.abspath(
-            f"{data_folder}/lightsheet_template_ccf_registration/ccf_annotation_to_template_moved.nii.gz"
+            f"{data_folder}/lightsheet_template_ccf_registration/ccf_annotation_to_template_moved_25.nii.gz"
         )
 
         if not os.path.isfile(template_path):
