@@ -92,6 +92,8 @@ def main() -> None:
     processing_manifest_path = f"{data_folder}/processing_manifest.json"
     acquisition_path = f"{data_folder}/acquisition.json"
 
+    logger = create_logger(output_log_path=reg_folder)
+
     if not os.path.exists(processing_manifest_path):
         raise ValueError("Processing manifest path does not exist!")
 
@@ -137,7 +139,6 @@ def main() -> None:
     create_folder(reg_folder)
     create_folder(metadata_folder)
 
-    logger = create_logger(output_log_path=reg_folder)
     logger.info(
         f"Processing manifest {pipeline_config} provided in path {processing_manifest_path}"
     )
