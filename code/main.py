@@ -121,9 +121,9 @@ def main() -> None:
     additional_channels = pipeline_config["segmentation"]["channels"]
 
     #calculate downsample for registration
-    zarr_path = os.path.join(image_folder, f"{channel_to_register}.zarr/")
-    _, acquisition_metadata = get_zarr_metadata(zarr_path)
-    acquisition_res = acquisition_metadata['coordinateTransformations'][0][0]['scale'][2:]
+    zarr_attrs_path = os.path.join(image_folder, f"{channel_to_register}.zarr/.zattrs")
+    acquisition_metadata = utils.read_json_as_dict(zarr_attrs_path)
+    acquisition_res = acquisition_metadata['multiscales'][0]['datasets'][0]['coordinateTransformations'][0]['scale'][2:]
     reg_scale = get_estimated_downsample(acquisition_res)
     reg_res = [float(res)/(reg_scale * 1000) for res in acquisition_res]
 
