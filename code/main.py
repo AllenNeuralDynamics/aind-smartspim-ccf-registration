@@ -4,7 +4,6 @@ Main used in code ocean to execute capsule
 
 import multiprocessing
 import os
-import zarr
 from ome_zarr.reader import Reader
 
 from aind_ccf_reg import register, utils
@@ -29,8 +28,7 @@ def get_zarr_metadata(zarr_path):
         Metadata of the ZARR file.
     """
 
-    store = zarr.DirectoryStore(zarr_path)
-    reader = Reader(store)
+    reader = Reader(zarr_path)
 
     # nodes may include images, labels etc
     nodes = list(reader())
