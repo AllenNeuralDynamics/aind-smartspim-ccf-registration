@@ -18,7 +18,7 @@ RUN pip install -U --no-cache-dir \
     scikit-image==0.19.3 \
     tifffile==2022.10.10 \
     bokeh==2.4.2 \
-    zarr==2.13.3 \
+    zarr==2.16.1
     aind-data-schema==1.0.0 \
     xarray_multiscale==1.1.0 \
     dask[distributed]==2022.11.1 \
