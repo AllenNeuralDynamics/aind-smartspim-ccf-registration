@@ -28,7 +28,8 @@ def get_zarr_metadata(zarr_path):
         Metadata of the ZARR file.
     """
 
-    reader = Reader(zarr_path)
+    zarr_store = zarr.open(zarr_path, mode='r')
+    reader = Reader(zarr_store)
 
     # nodes may include images, labels etc
     nodes = list(reader())
