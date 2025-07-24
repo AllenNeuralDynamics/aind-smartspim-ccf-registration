@@ -4,6 +4,7 @@ Main used in code ocean to execute capsule
 
 import multiprocessing
 import os
+import zarr
 from ome_zarr.reader import Reader
 
 from aind_ccf_reg import register, utils
