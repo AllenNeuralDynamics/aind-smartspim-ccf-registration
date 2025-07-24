@@ -32,16 +32,18 @@ def get_zarr_metadata(zarr_path):
     if not os.path.exists(zarr_path):
         raise FileNotFoundError(f"Zarr store not found: {zarr_path}")
 
-    # Create DirectoryStore and manually add exists method
-    store = zarr.DirectoryStore(zarr_path)
+    # Open zarr group using the path directly
+    zarr_group = zarr.open(zarr_path, mode='r')
     
-    # Add the exists method that ome-zarr expects
-    def exists():
-        return os.path.exists(zarr_path)
-    
-    store.exists = exists
+    # Ensure we have a Group object (not Array)
+    if not isinstance(zarr_group, zarr.Group):
+        raise ValueError(f"Expected zarr Group, got {type(zarr_group)}")
 
-    reader = Reader(store)
+    # Add the exists method that ome-zarr Reader expects
+    if not hasattr(zarr_group, 'exists'):
+        zarr_group.exists = lambda: True
+    
+    reader = Reader(zarr_group)
 
     # nodes may include images, labels etc
     nodes = list(reader())
