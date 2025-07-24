@@ -138,7 +138,7 @@ def main() -> None:
     logger.info(f"Image was acquired at resolution (um): {acquisition_res}")
     reg_scale = get_estimated_downsample(acquisition_res)
     logger.info(f"Image is being downsampled by a factor: {reg_scale}")
-    reg_res = [float(res)/(reg_scale * 1000) for res in acquisition_res]
+    reg_res = [(float(res) * 2**reg_scale)/ 1000 for res in acquisition_res]
     logger.info(f"Registration resolution (mm): {reg_res}")
 
     logger.info(
