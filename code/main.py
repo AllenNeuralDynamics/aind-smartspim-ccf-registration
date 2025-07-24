@@ -124,8 +124,11 @@ def main() -> None:
     zarr_attrs_path = os.path.join(image_folder, f"{channel_to_register}.zarr/.zattrs")
     acquisition_metadata = utils.read_json_as_dict(zarr_attrs_path)
     acquisition_res = acquisition_metadata['multiscales'][0]['datasets'][0]['coordinateTransformations'][0]['scale'][2:]
+    logger.info(f"Image was acquired at resolution (um): {acquisition_res}")
     reg_scale = get_estimated_downsample(acquisition_res)
+    logger.info(f"Image is being downsampled by a factor: {reg_scale}")
     reg_res = [float(res)/(reg_scale * 1000) for res in acquisition_res]
+    logger.info(f"Registration resolution (mm): {reg_res}")
 
     results_folder = f"../results/ccf_{channel_to_register}"
     create_folder(results_folder)
