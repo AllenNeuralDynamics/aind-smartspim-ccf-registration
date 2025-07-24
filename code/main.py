@@ -92,8 +92,6 @@ def main() -> None:
     processing_manifest_path = f"{data_folder}/processing_manifest.json"
     acquisition_path = f"{data_folder}/acquisition.json"
 
-    logger = create_logger(output_log_path=reg_folder)
-
     if not os.path.exists(processing_manifest_path):
         raise ValueError("Processing manifest path does not exist!")
 
@@ -122,7 +120,18 @@ def main() -> None:
     channel_to_register = sorted_channels[-1]
     additional_channels = pipeline_config["segmentation"]["channels"]
 
-    #calculate downsample for registration
+
+    # Create output folders
+    results_folder = f"../results/ccf_{channel_to_register}"
+    create_folder(results_folder)
+    metadata_folder = os.path.abspath(f"{results_folder}/metadata")
+    reg_folder = os.path.abspath(f"{metadata_folder}/registration_metadata")
+    create_folder(reg_folder)
+    create_folder(metadata_folder)
+
+    logger = create_logger(output_log_path=reg_folder)
+
+    # Calculate downsample for registration
     zarr_attrs_path = os.path.join(image_folder, f"{channel_to_register}.zarr/.zattrs")
     acquisition_metadata = utils.read_json_as_dict(zarr_attrs_path)
     acquisition_res = acquisition_metadata['multiscales'][0]['datasets'][0]['coordinateTransformations'][0]['scale'][2:]
@@ -131,13 +140,6 @@ def main() -> None:
     logger.info(f"Image is being downsampled by a factor: {reg_scale}")
     reg_res = [float(res)/(reg_scale * 1000) for res in acquisition_res]
     logger.info(f"Registration resolution (mm): {reg_res}")
-
-    results_folder = f"../results/ccf_{channel_to_register}"
-    create_folder(results_folder)
-    metadata_folder = os.path.abspath(f"{results_folder}/metadata")
-    reg_folder = os.path.abspath(f"{metadata_folder}/registration_metadata")
-    create_folder(reg_folder)
-    create_folder(metadata_folder)
 
     logger.info(
         f"Processing manifest {pipeline_config} provided in path {processing_manifest_path}"
