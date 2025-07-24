@@ -29,8 +29,19 @@ def get_zarr_metadata(zarr_path):
         Metadata of the ZARR file.
     """
 
-    zarr_store = zarr.open(zarr_path, mode='r')
-    reader = Reader(zarr_store)
+    if not os.path.exists(zarr_path):
+        raise FileNotFoundError(f"Zarr store not found: {zarr_path}")
+
+    # Create DirectoryStore and manually add exists method
+    store = zarr.DirectoryStore(zarr_path)
+    
+    # Add the exists method that ome-zarr expects
+    def exists():
+        return os.path.exists(zarr_path)
+    
+    store.exists = exists
+
+    reader = Reader(store)
 
     # nodes may include images, labels etc
     nodes = list(reader())
