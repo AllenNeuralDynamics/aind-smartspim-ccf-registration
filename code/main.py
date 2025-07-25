@@ -4,10 +4,88 @@ Main used in code ocean to execute capsule
 
 import multiprocessing
 import os
+from typing import List, Tuple
 
+import zarr
 from aind_ccf_reg import register, utils
 from aind_ccf_reg.utils import create_folder, create_logger, read_json_as_dict
 from natsort import natsorted
+from ome_zarr.reader import Reader
+
+
+def get_zarr_metadata(zarr_path):
+    """
+    Opens a ZARR file and retrieves its metadata.
+
+    Parameters
+    ----------
+    zarr_path : str
+        file path to zarr file.
+
+    Returns
+    -------
+    image_node : ome_zarr.reader.Node
+        The image node of the ZARR file.
+    zarr_meta : dict
+        Metadata of the ZARR file.
+    """
+
+    if not os.path.exists(zarr_path):
+        raise FileNotFoundError(f"Zarr store not found: {zarr_path}")
+
+    # Open zarr group using the path directly
+    zarr_group = zarr.open(zarr_path, mode="r")
+
+    # Ensure we have a Group object (not Array)
+    if not isinstance(zarr_group, zarr.Group):
+        raise ValueError(f"Expected zarr Group, got {type(zarr_group)}")
+
+    # Add the exists method that ome-zarr Reader expects
+    if not hasattr(zarr_group, "exists"):
+        zarr_group.exists = lambda: True
+
+    reader = Reader(zarr_group)
+
+    # nodes may include images, labels etc
+    nodes = list(reader())
+
+    # first node will be the image pixel data
+    image_node = nodes[0]
+    zarr_meta = image_node.metadata
+    return image_node, zarr_meta
+
+
+def get_estimated_downsample(
+    voxel_resolution: List[float],
+    registration_res: Tuple[float] = (16.0, 14.4, 14.4),
+) -> int:
+    """
+    Get the estimated multiscale based on the provided
+    voxel resolution. This is used for image stitching.
+
+    e.g., if the original resolution is (1.8. 1.8, 2.0)
+    in XYZ order, and you provide (3.6, 3.6, 4.0) as
+    image resolution, then the picked resolution will be
+    1.
+
+    Parameters
+    ----------
+    voxel_resolution: List[float]
+        Image original resolution. This would be the resolution
+        in the multiscale "0".
+    registration_res: Tuple[float]
+        Approximated resolution that was used for registration
+        in the computation of the transforms. Default: (16.0, 14.4, 14.4)
+    """
+
+    downsample_versions = []
+    for idx in range(len(voxel_resolution)):
+        downsample_versions.append(
+            registration_res[idx] // float(voxel_resolution[idx])
+        )
+
+    downsample_res = int(min(downsample_versions) - 1)
+    return downsample_res
 
 
 def main() -> None:
@@ -15,6 +93,7 @@ def main() -> None:
     Main function to register a dataset
     """
     data_folder = os.path.abspath("../data")
+    image_folder = os.path.abspath("../data/fused")
     processing_manifest_path = f"{data_folder}/processing_manifest.json"
     acquisition_path = f"{data_folder}/acquisition.json"
 
@@ -45,6 +124,7 @@ def main() -> None:
     channel_to_register = sorted_channels[-1]
     additional_channels = pipeline_config["segmentation"]["channels"]
 
+    # Create output folders
     results_folder = f"../results/ccf_{channel_to_register}"
     create_folder(results_folder)
     metadata_folder = os.path.abspath(f"{results_folder}/metadata")
@@ -53,6 +133,21 @@ def main() -> None:
     create_folder(metadata_folder)
 
     logger = create_logger(output_log_path=reg_folder)
+
+    # Calculate downsample for registration
+    zarr_attrs_path = os.path.join(
+        image_folder, f"{channel_to_register}.zarr/.zattrs"
+    )
+    acquisition_metadata = utils.read_json_as_dict(zarr_attrs_path)
+    acquisition_res = acquisition_metadata["multiscales"][0]["datasets"][0][
+        "coordinateTransformations"
+    ][0]["scale"][2:]
+    logger.info(f"Image was acquired at resolution (um): {acquisition_res}")
+    reg_scale = get_estimated_downsample(acquisition_res)
+    logger.info(f"Image is being downsampled by a factor: {reg_scale}")
+    reg_res = [(float(res) * 2**reg_scale) / 1000 for res in acquisition_res]
+    logger.info(f"Registration resolution (mm): {reg_res}")
+
     logger.info(
         f"Processing manifest {pipeline_config} provided in path {processing_manifest_path}"
     )
@@ -153,10 +248,10 @@ def main() -> None:
     # ---------------------------------------------------#
 
     example_input = {
-        "input_data": "../data/fused",
+        "input_data": image_folder,
         "input_channel": channel_to_register,
         "additional_channels": additional_channels,
-        "input_scale": pipeline_config["registration"]["input_scale"],
+        "input_scale": reg_scale,
         "input_orientation": acquisition_orientation,
         "bucket_path": "aind-open-data",
         "template_path": template_path,  # SPIM template
@@ -185,7 +280,7 @@ def main() -> None:
             "percNorm_path": f"{reg_folder}/prep_percNorm.nii.gz",
         },
         "ants_params": {
-            "spacing": (0.016, 0.0144, 0.0144),
+            "spacing": tuple(reg_res),
             "unit": "millimetre",
             "template_orientations": {
                 "anterior_to_posterior": 1,
