@@ -4,13 +4,14 @@ Main used in code ocean to execute capsule
 
 import multiprocessing
 import os
-import zarr
-from ome_zarr.reader import Reader
+from typing import List, Tuple
 
+import zarr
 from aind_ccf_reg import register, utils
 from aind_ccf_reg.utils import create_folder, create_logger, read_json_as_dict
 from natsort import natsorted
-from typing import List, Tuple
+from ome_zarr.reader import Reader
+
 
 def get_zarr_metadata(zarr_path):
     """
@@ -33,16 +34,16 @@ def get_zarr_metadata(zarr_path):
         raise FileNotFoundError(f"Zarr store not found: {zarr_path}")
 
     # Open zarr group using the path directly
-    zarr_group = zarr.open(zarr_path, mode='r')
-    
+    zarr_group = zarr.open(zarr_path, mode="r")
+
     # Ensure we have a Group object (not Array)
     if not isinstance(zarr_group, zarr.Group):
         raise ValueError(f"Expected zarr Group, got {type(zarr_group)}")
 
     # Add the exists method that ome-zarr Reader expects
-    if not hasattr(zarr_group, 'exists'):
+    if not hasattr(zarr_group, "exists"):
         zarr_group.exists = lambda: True
-    
+
     reader = Reader(zarr_group)
 
     # nodes may include images, labels etc
@@ -53,8 +54,10 @@ def get_zarr_metadata(zarr_path):
     zarr_meta = image_node.metadata
     return image_node, zarr_meta
 
+
 def get_estimated_downsample(
-    voxel_resolution: List[float], registration_res: Tuple[float] = (16.0, 14.4, 14.4)
+    voxel_resolution: List[float],
+    registration_res: Tuple[float] = (16.0, 14.4, 14.4),
 ) -> int:
     """
     Get the estimated multiscale based on the provided
@@ -77,7 +80,9 @@ def get_estimated_downsample(
 
     downsample_versions = []
     for idx in range(len(voxel_resolution)):
-        downsample_versions.append(registration_res[idx] // float(voxel_resolution[idx]))
+        downsample_versions.append(
+            registration_res[idx] // float(voxel_resolution[idx])
+        )
 
     downsample_res = int(min(downsample_versions) - 1)
     return downsample_res
@@ -107,19 +112,17 @@ def main() -> None:
     acquisition_json = read_json_as_dict(acquisition_path)
     acquisition_orientation = acquisition_json.get("axes")
 
-
     if acquisition_orientation is None:
         raise ValueError(
             f"Please, provide a valid acquisition orientation, acquisition: {acquisition_json}"
         )
-        
+
     # Setting parameters based on pipeline
     sorted_channels = natsorted(pipeline_config["registration"]["channels"])
 
     # Getting highest wavelenght as default for registration
     channel_to_register = sorted_channels[-1]
     additional_channels = pipeline_config["segmentation"]["channels"]
-
 
     # Create output folders
     results_folder = f"../results/ccf_{channel_to_register}"
@@ -132,13 +135,17 @@ def main() -> None:
     logger = create_logger(output_log_path=reg_folder)
 
     # Calculate downsample for registration
-    zarr_attrs_path = os.path.join(image_folder, f"{channel_to_register}.zarr/.zattrs")
+    zarr_attrs_path = os.path.join(
+        image_folder, f"{channel_to_register}.zarr/.zattrs"
+    )
     acquisition_metadata = utils.read_json_as_dict(zarr_attrs_path)
-    acquisition_res = acquisition_metadata['multiscales'][0]['datasets'][0]['coordinateTransformations'][0]['scale'][2:]
+    acquisition_res = acquisition_metadata["multiscales"][0]["datasets"][0][
+        "coordinateTransformations"
+    ][0]["scale"][2:]
     logger.info(f"Image was acquired at resolution (um): {acquisition_res}")
     reg_scale = get_estimated_downsample(acquisition_res)
     logger.info(f"Image is being downsampled by a factor: {reg_scale}")
-    reg_res = [(float(res) * 2**reg_scale)/ 1000 for res in acquisition_res]
+    reg_res = [(float(res) * 2**reg_scale) / 1000 for res in acquisition_res]
     logger.info(f"Registration resolution (mm): {reg_res}")
 
     logger.info(
