@@ -6,6 +6,7 @@ import multiprocessing
 import os
 from typing import List, Tuple
 
+import numpy as np
 import zarr
 from aind_ccf_reg import register, utils
 from aind_ccf_reg.utils import create_folder, create_logger, read_json_as_dict
@@ -84,8 +85,8 @@ def get_estimated_downsample(
             registration_res[idx] // float(voxel_resolution[idx])
         )
 
-    downsample_res = int(min(downsample_versions) - 1)
-    return downsample_res
+    downsample_res = int(min(downsample_versions))
+    return round(np.log2(downsample_res))
 
 
 def main() -> None:
