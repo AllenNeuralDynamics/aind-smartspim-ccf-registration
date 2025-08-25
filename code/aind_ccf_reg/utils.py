@@ -311,7 +311,14 @@ def check_orientation(img: np.array, params: dict, orientations: dict):
 
 
 class create_precomputed:
+    """
+    Creates a precomputed pyramid for segmentation data
+    """
+
     def __init__(self, ng_params):
+        """
+        Initializes the class with the parameters
+        """
         self.regions = ng_params["regions"]
         self.scaling = ng_params["scale_params"]
         self.save_path = ng_params["save_path"]
@@ -480,6 +487,9 @@ class create_precomputed:
         return
 
     def cleanup_seg_files(self):
+        """
+        Renames all the .br files to remove the extension
+        """
         files = glob(f"{self.save_path}/**/*.br", recursive=True)
 
         for file in files:
