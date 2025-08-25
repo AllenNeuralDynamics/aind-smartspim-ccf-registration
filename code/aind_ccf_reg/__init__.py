@@ -1,6 +1,6 @@
 """CCF Registration package."""
 
-__version__ = "0.0.32"
+__version__ = "0.0.33"
 
 __authors__ = [
     "Camilo Laiton",
@@ -36,4 +36,4 @@ __maintainer_emails__ = [
 ]
 __title__ = "aind-smartspim-destripe"
 __status__ = "Production"  # 'Development' 'Production', 'Beta'
-__pipeline_version__ = "3.0.0"
+__pipeline_version__ = "4.0.0"

@@ -12,7 +12,7 @@ RUN conda create -n ccf_reg python=3.8
 SHELL ["conda", "run", "-n", "ccf_reg", "/bin/bash", "-c"]
 
 RUN pip install -U --no-cache-dir \
-    antspyx==0.4.2 \
+    antspyx==0.6.1 \
     argschema==3.0.4 \
     s3fs==2022.11.0 \
     scikit-image==0.19.3 \
