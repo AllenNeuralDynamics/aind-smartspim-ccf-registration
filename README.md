@@ -18,6 +18,8 @@ $$resZ=origResZ*(2^m)$$
 
 Where $$m$$ is the provided multiscale. By default, we are using the 3rd. Afterwards, we resample the image to match the $$25um$$ microns space and then, we register the resulting image to the Allen CCF atlas.
 
+The SmartSPIM lightsheet template is located in our [public S3 bucket](https://open.quiltdata.com/b/aind-open-data/tree/SmartSPIM-template_2024-05-16_11-26-14/). Please, check the readme in this path for more information about the template.
+
 ## Installation
 To use the software, in the root directory, run
 ```
@@ -28,9 +30,6 @@ To develop the code, run
 ```
 pip install -e .[dev]
 ```
-
-In Code Ocean, it is necessary to create 5 text parameters:
-1. input_data: This parameter
 
 ## Contributing
 
