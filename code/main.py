@@ -2,6 +2,7 @@
 Main used in code ocean to execute capsule
 """
 
+import math
 import multiprocessing
 import os
 from typing import List, Tuple
@@ -57,35 +58,38 @@ def get_zarr_metadata(zarr_path):
 
 def get_estimated_downsample(
     voxel_resolution: List[float],
-    registration_res: Tuple[float] = (16.0, 14.4, 14.4),
+    registration_res: Tuple[float, float, float] = (16.0, 14.4, 14.4),
 ) -> int:
     """
-    Get the estimated multiscale based on the provided
-    voxel resolution. This is used for image stitching.
+    Estimate the multiscale downsample level based on voxel resolution.
 
-    e.g., if the original resolution is (1.8. 1.8, 2.0)
-    in XYZ order, and you provide (3.6, 3.6, 4.0) as
-    image resolution, then the picked resolution will be
-    1.
+    Example:
+    --------
+    If voxel_resolution = (1.8, 1.8, 2.0) and registration_res = (3.6, 3.6, 4.0),
+    the result will be 1, because the registration resolution is about 2× coarser.
 
     Parameters
     ----------
-    voxel_resolution: List[float]
-        Image original resolution. This would be the resolution
-        in the multiscale "0".
-    registration_res: Tuple[float]
-        Approximated resolution that was used for registration
-        in the computation of the transforms. Default: (16.0, 14.4, 14.4)
+    voxel_resolution : List[float]
+        Resolution of the image at scale 0 (e.g., in microns per voxel).
+    registration_res : Tuple[float, float, float]
+        Approximate resolution used for registration.
+
+    Returns
+    -------
+    int
+        Estimated downsample level.
     """
+    ratios = [
+        registration_res[i] / float(voxel_resolution[i])
+        for i in range(len(voxel_resolution))
+    ]
 
-    downsample_versions = []
-    for idx in range(len(voxel_resolution)):
-        downsample_versions.append(
-            registration_res[idx] // float(voxel_resolution[idx])
-        )
+    # Choose the smallest ratio across dimensions (safest valid downsample factor)
+    downsample_factor = min(ratios)
 
-    downsample_res = int(min(downsample_versions) - 1)
-    return downsample_res
+    # Convert to nearest integer downsample level
+    return int(round(math.log2(downsample_factor)))
 
 
 def main() -> None:
@@ -130,7 +134,9 @@ def main() -> None:
             )
 
         # Setting parameters based on pipeline
-        sorted_channels = natsorted(pipeline_config["registration"]["channels"])
+        sorted_channels = natsorted(
+            pipeline_config["registration"]["channels"]
+        )
 
         # Getting highest wavelenght as default for registration
         channel_to_register = sorted_channels[-1]
@@ -140,7 +146,9 @@ def main() -> None:
         results_folder = f"../results/ccf_{channel_to_register}"
         create_folder(results_folder)
         metadata_folder = os.path.abspath(f"{results_folder}/metadata")
-        reg_folder = os.path.abspath(f"{metadata_folder}/registration_metadata")
+        reg_folder = os.path.abspath(
+            f"{metadata_folder}/registration_metadata"
+        )
         create_folder(reg_folder)
         create_folder(metadata_folder)
 
@@ -151,13 +159,17 @@ def main() -> None:
             image_folder, f"{channel_to_register}.zarr/.zattrs"
         )
         acquisition_metadata = utils.read_json_as_dict(zarr_attrs_path)
-        acquisition_res = acquisition_metadata["multiscales"][0]["datasets"][0][
-            "coordinateTransformations"
-        ][0]["scale"][2:]
-        logger.info(f"Image was acquired at resolution (um): {acquisition_res}")
+        acquisition_res = acquisition_metadata["multiscales"][0]["datasets"][
+            0
+        ]["coordinateTransformations"][0]["scale"][2:]
+        logger.info(
+            f"Image was acquired at resolution (um): {acquisition_res}"
+        )
         reg_scale = get_estimated_downsample(acquisition_res)
         logger.info(f"Image is being downsampled by a factor: {reg_scale}")
-        reg_res = [(float(res) * 2**reg_scale) / 1000 for res in acquisition_res]
+        reg_res = [
+            (float(res) * 2**reg_scale) / 1000 for res in acquisition_res
+        ]
         logger.info(f"Registration resolution (mm): {reg_res}")
 
         logger.info(
@@ -188,7 +200,7 @@ def main() -> None:
 
         logger.info(f"{'='*40} SmartSPIM CCF Registration {'='*40}")
 
-    # ---------------------------------------------------#
+        # ---------------------------------------------------#
         # path to SPIM template, CCF and template-to-CCF registration
         template_path = os.path.abspath(
             f"{data_folder}/lightsheet_template_ccf_registration/smartspim_lca_template_25.nii.gz"
@@ -206,7 +218,9 @@ def main() -> None:
             template_to_ccf_transform_warp_path,
             template_to_ccf_transform_affine_path,
         ]
-        print(f"template_to_ccf_transform_path: {template_to_ccf_transform_path}")
+        print(
+            f"template_to_ccf_transform_path: {template_to_ccf_transform_path}"
+        )
 
         ccf_to_template_transform_warp_path = os.path.abspath(
             f"{data_folder}/lightsheet_template_ccf_registration/spim_template_to_ccf_syn_1InverseWarp_25.nii.gz"
@@ -217,7 +231,9 @@ def main() -> None:
             ccf_to_template_transform_warp_path,
         ]
 
-        print(f"ccf_to_template_transform_path: {ccf_to_template_transform_path}")
+        print(
+            f"ccf_to_template_transform_path: {ccf_to_template_transform_path}"
+        )
 
         ccf_annotation_to_template_moved_path = os.path.abspath(
             f"{data_folder}/lightsheet_template_ccf_registration/ccf_annotation_to_template_moved_25.nii.gz"
@@ -253,7 +269,9 @@ def main() -> None:
         regions = read_json_as_dict(
             "../code/aind_ccf_reg/ccf_files/annotation_map.json"
         )
-        precompute_path = os.path.abspath("../results/ccf_annotation_precomputed")
+        precompute_path = os.path.abspath(
+            "../results/ccf_annotation_precomputed"
+        )
         create_folder(precompute_path)
         create_folder(f"{precompute_path}/segment_properties")
 
