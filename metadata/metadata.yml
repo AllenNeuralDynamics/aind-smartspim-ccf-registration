@@ -1,5 +1,5 @@
 metadata_version: 1
-name: aind-smartspim-ccf-registration-0.0.32
+name: aind-smartspim-ccf-registration-0.0.34
 description: A tool for automated registration of lightsheet image volumes to the
   Allen V3 CCF template
 tags:
@@ -9,6 +9,15 @@ authors:
   affiliations:
   - name: Allen Institute for Neural Dynamics
 - name: Di Wang
+  affiliations:
+  - name: Allen Institute for Neural Dynamics
+- name: Galen Lynch
+  affiliations:
+  - name: Allen Institute for Neural Dynamics
+- name: Yoni Browning
+  affiliations:
+  - name: Allen Institute for Neural Dynamics
+- name: Nicholas Lusk
   affiliations:
   - name: Allen Institute for Neural Dynamics
 - name: Sharmishtaa Seshamani

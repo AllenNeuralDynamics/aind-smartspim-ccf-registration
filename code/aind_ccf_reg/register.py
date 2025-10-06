@@ -30,6 +30,7 @@ from distributed import wait
 from numcodecs import blosc
 
 from .__init__ import __version__
+from .utils import get_cpu_limit
 
 blosc.use_threads = False
 
@@ -796,7 +797,7 @@ class Register(ArgSchemaParser):
 
         return
 
-    def additional_channal_alignment(
+    def additional_channel_alignment(
         self,
         img_array: np.array,
         ants_params: dict,
@@ -953,7 +954,9 @@ class Register(ArgSchemaParser):
 
         # Writing OMEZarr image
 
-        n_workers = multiprocessing.cpu_count()
+        # Pulling number of available workers in Code Ocean or SLURM
+        n_workers = int(get_cpu_limit())
+
         threads_per_worker = 1
         # Using 1 thread since is in single machine.
         # Avoiding the use of multithreaded due to GIL
@@ -1196,7 +1199,7 @@ class Register(ArgSchemaParser):
 
             img_array = self.__read_zarr_image(image_path)
 
-            aligned_image = self.additional_channal_alignment(
+            aligned_image = self.additional_channel_alignment(
                 img_array, ants_params
             )
 
