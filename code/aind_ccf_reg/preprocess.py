@@ -271,7 +271,7 @@ class Preprocess:
 
         logger.info(f"Parameters -> {n4_bias_params}")
         start_time = datetime.now()
-        ants_img_n4 = ants.utils.n4_bias_field_correction(
+        ants_img_n4 = ants.n4_bias_field_correction(
             ants_img, **n4_bias_params
         )
         end_time = datetime.now()
