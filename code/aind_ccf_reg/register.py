@@ -349,7 +349,7 @@ class Register(ArgSchemaParser):
         logger.info("Start registering to template ....")
 
         if self.args["reference_res"] == 25:
-            reg_iterations = [200, 100, 25, 3]
+            reg_iterations = [3000, 3000, 3000, 3000]
         elif self.args["reference_res"] == 10:
             reg_iterations = [400, 200, 40, 0]
         else:
@@ -1294,7 +1294,7 @@ def main(input_config: dict):
     """
     Main function to execute
     """
-    mod = Register(input_config)
+    mod = Register(input_config,args=[])
     return mod.run()
 
 
