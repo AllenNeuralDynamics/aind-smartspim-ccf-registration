@@ -5,7 +5,8 @@
 			"id": "wKwvs75xKainN9zc",
 			"name": "Stitched",
 			"type": "text",
-			"value_type": "string"
+			"value_type": "string",
+			"default_value": "SmartSPIM_693196_2023-09-28_23-12-22_stitched_2024-01-11_10-23-15"
 		},
 		{
 			"id": "YzWG7EflI5ZReYow",
