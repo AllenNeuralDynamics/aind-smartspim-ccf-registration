@@ -13,6 +13,8 @@ from aind_ccf_reg.utils import create_folder, create_logger, read_json_as_dict
 from natsort import natsorted
 from ome_zarr.reader import Reader
 
+import argparse
+import sys
 
 def get_zarr_metadata(zarr_path):
     """
@@ -91,281 +93,308 @@ def get_estimated_downsample(
     # Convert to nearest integer downsample level
     return int(round(math.log2(downsample_factor)))
 
+def get_parser():
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument('--stitched',
+        type = str,
+        help = 'Name of stitched data base dir (e.g. SmartSPIM_693196_2023-09-28_23-12-22_stitched_2024-01-11_10-23-15)')
+
+    registration_channel = parser.add_argument('--channel',
+        type = str,
+        help = 'Channel to register')
+    return parser
+
 
 def main() -> None:
     """
     Main function to register a dataset
     """
-    data_folder = os.path.abspath("../data")
-    results_path = os.path.abspath("../results")
-    image_folder = os.path.abspath("../data/fused")
-    processing_manifest_path = f"{data_folder}/processing_manifest.json"
-    acquisition_path = f"{data_folder}/acquisition.json"
+    parser = get_parser()
+    args = parser.parse_args()
 
-    if not os.path.exists(processing_manifest_path):
-        raise ValueError("Processing manifest path does not exist!")
+    spim_image_stitched = args.stitched
+    registration_channel = args.channel
+
+    data_folder = os.path.abspath(f"../data")
+    results_path = os.path.abspath(f"../results")
+    image_folder = os.path.abspath(f"../data/{spim_image_stitched}")
+
+    # processing_manifest_path = f"{data_folder}/processing.json"
+
+    acquisition_path = f"{image_folder}/acquisition.json"
+
+    # print(processing_manifest_path)
+    # if not os.path.exists(processing_manifest_path):
+    #     raise ValueError("Processing manifest path does not exist!")
+    
+    print(acquisition_path)
 
     if not os.path.exists(acquisition_path):
         raise ValueError("Acquisition path does not exist!")
 
-    pipeline_config = read_json_as_dict(processing_manifest_path)
-    pipeline_config = pipeline_config.get("pipeline_processing")
+    # pipeline_config = read_json_as_dict(processing_manifest_path)
+    # pipeline_config = pipeline_config.get("pipeline_processing")
 
-    if pipeline_config is None:
-        raise ValueError("Please, provide a valid processing manifest")
+    # if pipeline_config is None:
+    #     raise ValueError("Please, provide a valid processing manifest")
 
-    registration_info = pipeline_config.get("registration")
+    # registration_info = pipeline_config.get("registration")
 
-    if registration_info is None:
-        raise ValueError("Please, provide registration channels.")
+    # if registration_info is None:
+    #     raise ValueError("Please, provide registration channels.")
 
-    channels_to_process = registration_info.get("channels")
+    #channels_to_process = registration_info.get("channels")
 
-    # Note: The dispatcher capsule creates a single config with
-    # the channels. If the channel key does not exist, or it's empty
-    # it means there are no segmentation channels splitted
-    if channels_to_process is not None and len(channels_to_process):
-        acquisition_json = read_json_as_dict(acquisition_path)
-        acquisition_orientation = acquisition_json.get("axes")
+    acquisition_json = read_json_as_dict(acquisition_path)
+    acquisition_orientation = acquisition_json.get("axes")
 
-        if acquisition_orientation is None:
-            raise ValueError(
-                f"Please, provide a valid acquisition orientation, acquisition: {acquisition_json}"
-            )
-
-        # Setting parameters based on pipeline
-        sorted_channels = natsorted(
-            pipeline_config["registration"]["channels"]
+    if acquisition_orientation is None:
+        raise ValueError(
+            f"Please, provide a valid acquisition orientation, acquisition: {acquisition_json}"
         )
 
-        # Getting highest wavelenght as default for registration
-        channel_to_register = sorted_channels[-1]
-        additional_channels = pipeline_config["segmentation"]["channels"]
+    # # Setting parameters based on pipeline
+    # sorted_channels = natsorted(
+    #     pipeline_config["registration"]["channels"]
+    # )
 
-        # Create output folders
-        results_folder = f"../results/ccf_{channel_to_register}"
-        create_folder(results_folder)
-        metadata_folder = os.path.abspath(f"{results_folder}/metadata")
-        reg_folder = os.path.abspath(
-            f"{metadata_folder}/registration_metadata"
+    # # Getting highest wavelenght as default for registration
+    # channel_to_register = sorted_channels[-1]
+    # additional_channels = pipeline_config["segmentation"]["channels"]
+    channel_to_register = registration_channel
+
+    # Create output folders
+    results_folder = f"../results/ccf_{channel_to_register}"
+    create_folder(results_folder)
+    metadata_folder = os.path.abspath(f"{results_folder}/metadata")
+    reg_folder = os.path.abspath(
+        f"{metadata_folder}/registration_metadata"
+    )
+    create_folder(reg_folder)
+    create_folder(metadata_folder)
+
+    logger = create_logger(output_log_path=reg_folder)
+
+    # Calculate downsample for registration
+    zarr_attrs_path = os.path.join(
+        image_folder,'image_tile_fusing','OMEZarr', f"{channel_to_register}.zarr/.zattrs"
+    )
+    acquisition_metadata = utils.read_json_as_dict(zarr_attrs_path)
+    acquisition_res = acquisition_metadata["multiscales"][0]["datasets"][
+        0
+    ]["coordinateTransformations"][0]["scale"][2:]
+    logger.info(
+        f"Image was acquired at resolution (um): {acquisition_res}"
+    )
+    reg_scale = get_estimated_downsample(acquisition_res)
+    logger.info(f"Image is being downsampled by a factor: {reg_scale}")
+    reg_res = [
+        (float(res) * 2**reg_scale) / 1000 for res in acquisition_res
+    ]
+    logger.info(f"Registration resolution (mm): {reg_res}")
+
+    # logger.info(
+    #     f"Processing manifest {pipeline_config} provided in path {processing_manifest_path}"
+    # )
+    logger.info(f"channel_to_register: {channel_to_register}")
+
+    utils.print_system_information(logger)
+
+    # Tracking compute resources
+    # Subprocess to track used resources
+    manager = multiprocessing.Manager()
+    time_points = manager.list()
+    cpu_percentages = manager.list()
+    memory_usages = manager.list()
+
+    profile_process = multiprocessing.Process(
+        target=utils.profile_resources,
+        args=(
+            time_points,
+            cpu_percentages,
+            memory_usages,
+            20,
+        ),
+    )
+    profile_process.daemon = True
+    profile_process.start()
+
+    logger.info(f"{'='*40} SmartSPIM CCF Registration {'='*40}")
+
+    # ---------------------------------------------------#
+    # path to SPIM template, CCF and template-to-CCF registration
+    template_path = os.path.abspath(
+        f"{data_folder}/lightsheet_template_ccf_registration/smartspim_lca_template_25.nii.gz"
+    )
+    ccf_reference_path = os.path.abspath(
+        f"{data_folder}/lightsheet_template_ccf_registration/ccf_average_template_25.nii.gz"
+    )
+    template_to_ccf_transform_warp_path = os.path.abspath(
+        f"{data_folder}/lightsheet_template_ccf_registration/spim_template_to_ccf_syn_1Warp.nii.gz"
+    )
+    template_to_ccf_transform_affine_path = os.path.abspath(
+        f"{data_folder}/lightsheet_template_ccf_registration/spim_template_to_ccf_syn_0GenericAffine.mat"
+    )
+    template_to_ccf_transform_path = [
+        template_to_ccf_transform_warp_path,
+        template_to_ccf_transform_affine_path,
+    ]
+    print(
+        f"template_to_ccf_transform_path: {template_to_ccf_transform_path}"
+    )
+
+    ccf_to_template_transform_warp_path = os.path.abspath(
+        f"{data_folder}/lightsheet_template_ccf_registration/spim_template_to_ccf_syn_1InverseWarp_25.nii.gz"
+    )
+
+    ccf_to_template_transform_path = [
+        template_to_ccf_transform_affine_path,
+        ccf_to_template_transform_warp_path,
+    ]
+
+    print(
+        f"ccf_to_template_transform_path: {ccf_to_template_transform_path}"
+    )
+
+    ccf_annotation_to_template_moved_path = os.path.abspath(
+        f"{data_folder}/lightsheet_template_ccf_registration/ccf_annotation_to_template_moved.nii.gz"
+    )
+
+    if not os.path.isfile(template_path):
+        raise FileNotFoundError(
+            f"template_path {template_path} not exist, please provide valid path to SPIM template"
         )
-        create_folder(reg_folder)
-        create_folder(metadata_folder)
 
-        logger = create_logger(output_log_path=reg_folder)
-
-        # Calculate downsample for registration
-        zarr_attrs_path = os.path.join(
-            image_folder, f"{channel_to_register}.zarr/.zattrs"
-        )
-        acquisition_metadata = utils.read_json_as_dict(zarr_attrs_path)
-        acquisition_res = acquisition_metadata["multiscales"][0]["datasets"][
-            0
-        ]["coordinateTransformations"][0]["scale"][2:]
-        logger.info(
-            f"Image was acquired at resolution (um): {acquisition_res}"
-        )
-        reg_scale = get_estimated_downsample(acquisition_res)
-        logger.info(f"Image is being downsampled by a factor: {reg_scale}")
-        reg_res = [
-            (float(res) * 2**reg_scale) / 1000 for res in acquisition_res
-        ]
-        logger.info(f"Registration resolution (mm): {reg_res}")
-
-        logger.info(
-            f"Processing manifest {pipeline_config} provided in path {processing_manifest_path}"
-        )
-        logger.info(f"channel_to_register: {channel_to_register}")
-
-        utils.print_system_information(logger)
-
-        # Tracking compute resources
-        # Subprocess to track used resources
-        manager = multiprocessing.Manager()
-        time_points = manager.list()
-        cpu_percentages = manager.list()
-        memory_usages = manager.list()
-
-        profile_process = multiprocessing.Process(
-            target=utils.profile_resources,
-            args=(
-                time_points,
-                cpu_percentages,
-                memory_usages,
-                20,
-            ),
-        )
-        profile_process.daemon = True
-        profile_process.start()
-
-        logger.info(f"{'='*40} SmartSPIM CCF Registration {'='*40}")
-
-        # ---------------------------------------------------#
-        # path to SPIM template, CCF and template-to-CCF registration
-        template_path = os.path.abspath(
-            f"{data_folder}/lightsheet_template_ccf_registration/smartspim_lca_template_25.nii.gz"
-        )
-        ccf_reference_path = os.path.abspath(
-            f"{data_folder}/lightsheet_template_ccf_registration/ccf_average_template_25.nii.gz"
-        )
-        template_to_ccf_transform_warp_path = os.path.abspath(
-            f"{data_folder}/lightsheet_template_ccf_registration/spim_template_to_ccf_syn_1Warp_25.nii.gz"
-        )
-        template_to_ccf_transform_affine_path = os.path.abspath(
-            f"{data_folder}/lightsheet_template_ccf_registration/spim_template_to_ccf_syn_0GenericAffine_25.mat"
-        )
-        template_to_ccf_transform_path = [
-            template_to_ccf_transform_warp_path,
-            template_to_ccf_transform_affine_path,
-        ]
-        print(
-            f"template_to_ccf_transform_path: {template_to_ccf_transform_path}"
+    if not os.path.isfile(ccf_reference_path):
+        raise FileNotFoundError(
+            f"ccf_reference_path {ccf_reference_path} not exist, please provide valid path to CCF atlas"
         )
 
-        ccf_to_template_transform_warp_path = os.path.abspath(
-            f"{data_folder}/lightsheet_template_ccf_registration/spim_template_to_ccf_syn_1InverseWarp_25.nii.gz"
+    if not os.path.isfile(template_to_ccf_transform_warp_path):
+        raise FileNotFoundError(
+            f"template_to_ccf_transform_warp_path {template_to_ccf_transform_warp_path} not exist, please provide valid path"
         )
 
-        ccf_to_template_transform_path = [
-            template_to_ccf_transform_affine_path,
-            ccf_to_template_transform_warp_path,
-        ]
-
-        print(
-            f"ccf_to_template_transform_path: {ccf_to_template_transform_path}"
+    if not os.path.isfile(template_to_ccf_transform_affine_path):
+        raise FileNotFoundError(
+            f"template_to_ccf_transform_affine_path {template_to_ccf_transform_affine_path} not exist, please provide valid path"
         )
 
-        ccf_annotation_to_template_moved_path = os.path.abspath(
-            f"{data_folder}/lightsheet_template_ccf_registration/ccf_annotation_to_template_moved_25.nii.gz"
+    if not os.path.isfile(ccf_annotation_to_template_moved_path):
+        raise FileNotFoundError(
+            f"ccf_annotation_to_template_moved_path {ccf_annotation_to_template_moved_path} not exist, please provide valid path"
         )
 
-        if not os.path.isfile(template_path):
-            raise FileNotFoundError(
-                f"template_path {template_path} not exist, please provide valid path to SPIM template"
-            )
+    # ---------------------------------------------------#
 
-        if not os.path.isfile(ccf_reference_path):
-            raise FileNotFoundError(
-                f"ccf_reference_path {ccf_reference_path} not exist, please provide valid path to CCF atlas"
-            )
+    regions = read_json_as_dict(
+        "../code/aind_ccf_reg/ccf_files/annotation_map.json"
+    )
+    precompute_path = os.path.abspath(
+        "../results/ccf_annotation_precomputed"
+    )
+    create_folder(precompute_path)
+    create_folder(f"{precompute_path}/segment_properties")
 
-        if not os.path.isfile(template_to_ccf_transform_warp_path):
-            raise FileNotFoundError(
-                f"template_to_ccf_transform_warp_path {template_to_ccf_transform_warp_path} not exist, please provide valid path"
-            )
+    # ---------------------------------------------------#
 
-        if not os.path.isfile(template_to_ccf_transform_affine_path):
-            raise FileNotFoundError(
-                f"template_to_ccf_transform_affine_path {template_to_ccf_transform_affine_path} not exist, please provide valid path"
-            )
-
-        if not os.path.isfile(ccf_annotation_to_template_moved_path):
-            raise FileNotFoundError(
-                f"ccf_annotation_to_template_moved_path {ccf_annotation_to_template_moved_path} not exist, please provide valid path"
-            )
-
-        # ---------------------------------------------------#
-
-        regions = read_json_as_dict(
-            "../code/aind_ccf_reg/ccf_files/annotation_map.json"
-        )
-        precompute_path = os.path.abspath(
-            "../results/ccf_annotation_precomputed"
-        )
-        create_folder(precompute_path)
-        create_folder(f"{precompute_path}/segment_properties")
-
-        # ---------------------------------------------------#
-
-        example_input = {
-            "input_data": image_folder,
-            "input_channel": channel_to_register,
-            "additional_channels": additional_channels,
-            "input_scale": reg_scale,
-            "input_orientation": acquisition_orientation,
-            "bucket_path": "aind-open-data",
-            "template_path": template_path,  # SPIM template
-            "ccf_reference_path": ccf_reference_path,
-            "template_to_ccf_transform_path": template_to_ccf_transform_path,
-            "ccf_to_template_transform_path": ccf_to_template_transform_path,
-            "ccf_annotation_to_template_moved_path": ccf_annotation_to_template_moved_path,
-            "reference_res": 25,
-            "output_data": os.path.abspath(f"{results_folder}/OMEZarr"),
-            "metadata_folder": metadata_folder,
-            "code_url": "https://github.com/AllenNeuralDynamics/aind-ccf-registration",
-            "results_folder": results_folder,
-            "reg_folder": reg_folder,
-            "prep_params": {
-                "rawdata_figpath": f"{reg_folder}/prep_zarr_img.jpg",
-                "rawdata_path": f"{reg_folder}/prep_zarr_img.nii.gz",
-                "resample_figpath": f"{reg_folder}/prep_resampled_zarr_img.jpg",
-                "resample_path": f"{reg_folder}/prep_resampled_zarr_img.nii.gz",
-                "mask_figpath": f"{reg_folder}/prep_mask.jpg",
-                "mask_path": f"{reg_folder}/prep_mask.nii.gz",
-                "n4bias_figpath": f"{reg_folder}/prep_n4bias.jpg",
-                "n4bias_path": f"{reg_folder}/prep_n4bias.nii.gz",
-                # "img_diff_n4bias_figpath": f"{reg_folder}/prep_img_diff_n4bias.jpg",
-                # "img_diff_n4bias_path": f"{reg_folder}/prep_img_diff_n4bias.nii.gz",
-                "percNorm_figpath": f"{reg_folder}/prep_percNorm.jpg",
-                "percNorm_path": f"{reg_folder}/prep_percNorm.nii.gz",
+    example_input = {
+        "input_data": os.path.join(image_folder,'image_tile_fusing','OMEZarr'),
+        "input_channel": channel_to_register,
+        #"additional_channels": additional_channels,
+        "input_scale": reg_scale,
+        "input_orientation": acquisition_orientation,
+        "bucket_path": "aind-open-data",
+        "template_path": template_path,  # SPIM template
+        "ccf_reference_path": ccf_reference_path,
+        "template_to_ccf_transform_path": template_to_ccf_transform_path,
+        "ccf_to_template_transform_path": ccf_to_template_transform_path,
+        "ccf_annotation_to_template_moved_path": ccf_annotation_to_template_moved_path,
+        "reference_res": 25,
+        "output_data": os.path.abspath(f"{results_folder}/OMEZarr"),
+        "metadata_folder": metadata_folder,
+        "code_url": "https://github.com/AllenNeuralDynamics/aind-ccf-registration",
+        "results_folder": results_folder,
+        "reg_folder": reg_folder,
+        "prep_params": {
+            "rawdata_figpath": f"{reg_folder}/prep_zarr_img.jpg",
+            "rawdata_path": f"{reg_folder}/prep_zarr_img.nii.gz",
+            "resample_figpath": f"{reg_folder}/prep_resampled_zarr_img.jpg",
+            "resample_path": f"{reg_folder}/prep_resampled_zarr_img.nii.gz",
+            "mask_figpath": f"{reg_folder}/prep_mask.jpg",
+            "mask_path": f"{reg_folder}/prep_mask.nii.gz",
+            "n4bias_figpath": f"{reg_folder}/prep_n4bias.jpg",
+            "n4bias_path": f"{reg_folder}/prep_n4bias.nii.gz",
+            # "img_diff_n4bias_figpath": f"{reg_folder}/prep_img_diff_n4bias.jpg",
+            # "img_diff_n4bias_path": f"{reg_folder}/prep_img_diff_n4bias.nii.gz",
+            "percNorm_figpath": f"{reg_folder}/prep_percNorm.jpg",
+            "percNorm_path": f"{reg_folder}/prep_percNorm.nii.gz",
+        },
+        "ants_params": {
+            "spacing": tuple(reg_res),
+            "unit": "millimetre",
+            "template_orientations": {
+                "anterior_to_posterior": 1,
+                "superior_to_inferior": 2,
+                "right_to_left": 0,
             },
-            "ants_params": {
-                "spacing": tuple(reg_res),
-                "unit": "millimetre",
-                "template_orientations": {
-                    "anterior_to_posterior": 1,
-                    "superior_to_inferior": 2,
-                    "right_to_left": 0,
-                },
-                "rigid_path": f"{reg_folder}/moved_rigid.nii.gz",
-                "affine_path": f"{reg_folder}/moved_affine.nii.gz",
-                "moved_to_template_path": f"{reg_folder}/moved_ls_to_template.nii.gz",
-                "moved_to_ccf_path": f"{results_folder}/moved_ls_to_ccf.nii.gz",
-                "ccf_anno_to_brain_path": f"{reg_folder}/moved_ccf_anno_to_ls.nii.gz",
+            "rigid_path": f"{reg_folder}/moved_rigid.nii.gz",
+            "affine_path": f"{reg_folder}/moved_affine.nii.gz",
+            "moved_to_template_path": f"{reg_folder}/moved_ls_to_template.nii.gz",
+            "moved_to_ccf_path": f"{results_folder}/moved_ls_to_ccf.nii.gz",
+            "ccf_anno_to_brain_path": f"{reg_folder}/moved_ccf_anno_to_ls.nii.gz",
+        },
+        "OMEZarr_params": {
+            "clevel": 1,
+            "compressor": "zstd",
+            "chunks": (64, 64, 64),
+        },
+        "ng_params": {
+            "save_path": precompute_path,
+            "regions": regions,
+            "scale_params": {
+                "encoding": "compresso",
+                "compressed_block": [16, 16, 16],
+                "chunk_size": [32, 32, 32],
+                "factors": [2, 2, 2],
+                "num_scales": 3,
             },
-            "OMEZarr_params": {
-                "clevel": 1,
-                "compressor": "zstd",
-                "chunks": (64, 64, 64),
-            },
-            "ng_params": {
-                "save_path": precompute_path,
-                "regions": regions,
-                "scale_params": {
-                    "encoding": "compresso",
-                    "compressed_block": [16, 16, 16],
-                    "chunk_size": [32, 32, 32],
-                    "factors": [2, 2, 2],
-                    "num_scales": 3,
-                },
-            },
-        }
+        },
+    }
 
-        logger.info(f"Input parameters in CCF run: {example_input}")
-        # flake8: noqa: F841
-        image_path = register.main(example_input)
+    logger.info(f"Input parameters in CCF run: {example_input}")
+    # flake8: noqa: F841
+    image_path = register.main(example_input)
 
-        logger.info(f"Saving outputs to: {image_path}")
+    #### ChatGPT Hack
+    # logger.info(f"Input parameters in CCF run: {example_input}")
 
-        # Getting tracked resources and plotting image
-        utils.stop_child_process(profile_process)
+    # # Temporarily hide this script's CLI args from aind_ccf_reg.register.main
+    # old_argv = sys.argv[:]
+    # try:
+    #     # Give the inner CLI a harmless argv; it will use example_input instead
+    #     sys.argv = ["register"]
+    #     image_path = register.main(example_input)
+    # finally:
+    #     # Restore original argv so anything after this still sees the real CLI
+    #     sys.argv = old_argv
+    #### End ChatGPT Hack
 
-        if len(time_points):
-            utils.generate_resources_graphs(
-                time_points,
-                cpu_percentages,
-                memory_usages,
-                metadata_folder,
-                "smartspim_ccf_registration",
-            )
+    logger.info(f"Saving outputs to: {image_path}")
 
-    else:
-        print(f"No registration channel, pipeline config: {pipeline_config}")
-        results_folder = f"{results_path}"
-        utils.save_dict_as_json(
-            filename=f"{results_folder}/registration_processing_manifest_empty.json",
-            dictionary=pipeline_config,
+    # Getting tracked resources and plotting image
+    utils.stop_child_process(profile_process)
+
+    if len(time_points):
+        utils.generate_resources_graphs(
+            time_points,
+            cpu_percentages,
+            memory_usages,
+            metadata_folder,
+            "smartspim_ccf_registration",
         )
+
 
 
 if __name__ == "__main__":

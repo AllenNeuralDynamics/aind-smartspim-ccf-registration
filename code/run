@@ -3,4 +3,7 @@ set -ex
 source /opt/conda/etc/profile.d/conda.sh
 conda activate ccf_reg
 
-python -u main.py "$@"
+#python -u main.py "$@"
+STITCHED="$1"
+CHANNEL="$2"
+python -u main.py --stitched "$STITCHED" --channel "$CHANNEL"

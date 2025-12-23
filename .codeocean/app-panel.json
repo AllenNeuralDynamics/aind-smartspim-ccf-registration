@@ -1,0 +1,18 @@
+{
+	"version": 1,
+	"parameters": [
+		{
+			"id": "wKwvs75xKainN9zc",
+			"name": "Stitched",
+			"type": "text",
+			"value_type": "string"
+		},
+		{
+			"id": "YzWG7EflI5ZReYow",
+			"name": "Channel",
+			"type": "text",
+			"value_type": "string",
+			"default_value": "Ex_639_Em_667"
+		}
+	]
+}
