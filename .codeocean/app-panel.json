@@ -14,6 +14,21 @@
 			"type": "text",
 			"value_type": "string",
 			"default_value": "Ex_639_Em_660"
+		},
+		{
+			"id": "3deooLP16m5O7u2B",
+			"name": "Is 180 degree rotation needed?",
+			"description": "False in most cases, true for new data",
+			"type": "text",
+			"value_type": "string",
+			"default_value": "True"
+		},
+		{
+			"id": "tl38nhS6Zo7OCRAb",
+			"name": "Additional channels",
+			"type": "text",
+			"value_type": "string",
+			"default_value": "Ex_561_Em_593,Ex_488_Em_525"
 		}
 	]
 }

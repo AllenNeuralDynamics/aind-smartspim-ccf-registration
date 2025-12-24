@@ -6,4 +6,7 @@ conda activate ccf_reg
 #python -u main.py "$@"
 STITCHED="$1"
 CHANNEL="$2"
-python -u main.py --stitched "$STITCHED" --channel "$CHANNEL"
+ROTATE="$3"
+ADDITIONAL="$4"
+
+python -u main.py --stitched "$STITCHED" --channel "$CHANNEL" --rotate "$ROTATE" --extra "$ADDITIONAL"

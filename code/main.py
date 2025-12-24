@@ -93,16 +93,38 @@ def get_estimated_downsample(
     # Convert to nearest integer downsample level
     return int(round(math.log2(downsample_factor)))
 
+def str2bool(v):
+    if isinstance(v, bool):
+        return v
+    if v.lower() in ('true', 't', 'yes', '1'):
+        return True
+    if v.lower() in ('false', 'f', 'no', '0'):
+        return False
+    raise argparse.ArgumentTypeError('Boolean value expected.')
+
 def get_parser():
     parser = argparse.ArgumentParser()
 
     parser.add_argument('--stitched',
+        default = "SmartSPIM_693196_2023-09-28_23-12-22_stitched_2024-01-11_10-23-15",
         type = str,
         help = 'Name of stitched data base dir (e.g. SmartSPIM_693196_2023-09-28_23-12-22_stitched_2024-01-11_10-23-15)')
 
     registration_channel = parser.add_argument('--channel',
+        default = 'Ex_639_Em_660',
         type = str,
         help = 'Channel to register')
+    
+    force_180 = parser.add_argument('--rotate',
+        default= True,
+        type = str2bool,
+        help = 'Should we rotate 180? Use true only for bad metadata')
+    
+    additional_channels = parser.add_argument('--extra',
+        default= 'Ex_561_Em_593,Ex_488_Em_525',
+        type = str,
+        help = 'Should we rotate 180? Use true only for bad metadata')
+    
     return parser
 
 
@@ -115,6 +137,8 @@ def main() -> None:
 
     spim_image_stitched = args.stitched
     registration_channel = args.channel
+    additional_channels = args.extra.split(',')
+    
 
     data_folder = os.path.abspath(f"../data")
     results_path = os.path.abspath(f"../results")
@@ -153,7 +177,30 @@ def main() -> None:
         raise ValueError(
             f"Please, provide a valid acquisition orientation, acquisition: {acquisition_json}"
         )
+    
+    print(acquisition_orientation)
+    if args.rotate:
+        print('DOING ROTATION!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
+        LR = False
+        AP = False
+        for ii,ax in enumerate(acquisition_orientation):
+            if (not LR) and (ax['direction']=="Left_to_right"):
+                ax['direction']="Right_to_left"
+                LR = True
+            elif (not LR) and (ax['direction']=="Right_to_left"):
+                ax['direction']="Left_to_right"
+                LR = True
+            elif (not AP) and (ax['direction']=="Posterior_to_anterior"):
+                ax['direction']="Anterior_to_posterior"
+                AP = True
+            elif (not AP) and (ax['direction']=="Anterior_to_posterior"):
+                ax['direction']="Posterior_to_anterior"
+                AP = True
+        print(acquisition_orientation)
 
+    else:
+        print('Not doing rotation')
+    
     # # Setting parameters based on pipeline
     # sorted_channels = natsorted(
     #     pipeline_config["registration"]["channels"]
@@ -163,6 +210,7 @@ def main() -> None:
     # channel_to_register = sorted_channels[-1]
     # additional_channels = pipeline_config["segmentation"]["channels"]
     channel_to_register = registration_channel
+    additional_channels = additional_channels # 
 
     # Create output folders
     results_folder = f"../results/ccf_{channel_to_register}"
@@ -302,7 +350,7 @@ def main() -> None:
     example_input = {
         "input_data": os.path.join(image_folder,'image_tile_fusing','OMEZarr'),
         "input_channel": channel_to_register,
-        #"additional_channels": additional_channels,
+        "additional_channels": additional_channels,
         "input_scale": reg_scale,
         "input_orientation": acquisition_orientation,
         "bucket_path": "aind-open-data",
@@ -366,20 +414,6 @@ def main() -> None:
     logger.info(f"Input parameters in CCF run: {example_input}")
     # flake8: noqa: F841
     image_path = register.main(example_input)
-
-    #### ChatGPT Hack
-    # logger.info(f"Input parameters in CCF run: {example_input}")
-
-    # # Temporarily hide this script's CLI args from aind_ccf_reg.register.main
-    # old_argv = sys.argv[:]
-    # try:
-    #     # Give the inner CLI a harmless argv; it will use example_input instead
-    #     sys.argv = ["register"]
-    #     image_path = register.main(example_input)
-    # finally:
-    #     # Restore original argv so anything after this still sees the real CLI
-    #     sys.argv = old_argv
-    #### End ChatGPT Hack
 
     logger.info(f"Saving outputs to: {image_path}")
 
