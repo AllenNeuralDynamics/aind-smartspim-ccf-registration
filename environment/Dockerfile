@@ -17,11 +17,11 @@ RUN pip install -U --no-cache-dir \
     s3fs==2023.6 \
     scikit-image==0.24 \
     tifffile==2022.10.10 \
-    bokeh==3.0 \
+    bokeh==3.6.3 \
     aind-data-schema==1.0.0 \
     xarray_multiscale==1.2.0 \
-    dask[array]==2024.3.0 \
-    distributed==2024.3.0 \
+    dask[array]==2024.9.0 \
+    distributed==2024.9.0 \
     cloud-volume[all_codecs]==11.0.2 \
     matplotlib==3.10.8 \
     ome-zarr==0.8.2 \
