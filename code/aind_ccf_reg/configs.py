@@ -57,6 +57,10 @@ class RegSchema(ArgSchema):
         metadata={"required": True, "description": "Path to the CCF template"}
     )
 
+    ccf_annotation_path = Str(
+        metadata={"required": True, "description": "Path to the CCF Annotation"}
+    )
+
     template_to_ccf_transform_path = sch_list(
         cls_or_instance=Str,
         metadata={

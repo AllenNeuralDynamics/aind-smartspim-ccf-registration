@@ -276,8 +276,11 @@ def main() -> None:
         f"{data_folder}/lightsheet_template_ccf_registration/smartspim_lca_template_25.nii.gz"
     )
     ccf_reference_path = os.path.abspath(
-        f"{data_folder}/lightsheet_template_ccf_registration/ccf_average_template_25.nii.gz"
+        f"{data_folder}/allen_mouse_ccf/average_template/average_template_25.nii.gz"
     )
+    ccf_annotation_path = os.path.abspath(
+        f"{data_folder}/allen_mouse_ccf/annoation/ccf_2017/annoation_25.nii.gs)
+
     template_to_ccf_transform_warp_path = os.path.abspath(
         f"{data_folder}/lightsheet_template_ccf_registration/spim_template_to_ccf_syn_1Warp.nii.gz"
     )
@@ -356,6 +359,7 @@ def main() -> None:
         "bucket_path": "aind-open-data",
         "template_path": template_path,  # SPIM template
         "ccf_reference_path": ccf_reference_path,
+        "ccf_annotation_path":ccf_annotation_path,
         "template_to_ccf_transform_path": template_to_ccf_transform_path,
         "ccf_to_template_transform_path": ccf_to_template_transform_path,
         "ccf_annotation_to_template_moved_path": ccf_annotation_to_template_moved_path,

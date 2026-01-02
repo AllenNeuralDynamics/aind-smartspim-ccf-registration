@@ -51,7 +51,12 @@ logging.basicConfig(format=LOG_FMT, datefmt=LOG_DATE_FMT)
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-
+def _pkg_version(dist_name: str) -> str:
+    try:
+        from importlib.metadata import version
+        return version(dist_name)
+    except Exception:
+        return "unknown"
 
 def pad_array_n_d(arr: ArrayLike, dim: int = 5) -> ArrayLike:
     """
@@ -126,7 +131,7 @@ def get_pyramid_metadata() -> dict:
             "description": """Downscaling implementation based on the
                 windowed mean of the original array""",
             "method": "xarray_multiscale.reducers.windowed_mean",
-            "version": str(xarray_multiscale.__version__),
+            "version": str(_pkg_version("xarray-multiscale")),
             "args": "[false]",
             # No extra parameters were used different
             # from the orig. array and scales
@@ -521,9 +526,12 @@ class Register(ArgSchemaParser):
         logger.info("Start registering CCF annotation to brain space....")
         logger.info(f"{'=='*40}")
 
-        ccf_anno_to_template_deformed = ants.image_read(
-            self.args["ccf_annotation_to_template_moved_path"]
-        )
+        ccf_annotation = ants.image_read(self.arg[""])
+
+        # Editing to fix 
+        # ccf_anno_to_template_deformed = ants.image_read(
+        #     self.args["ccf_annotation_to_template_moved_path"]
+        # )
 
         template_to_brain_transform_path = [
             f"{self.args['results_folder']}/ls_to_template_SyN_0GenericAffine.mat",
@@ -551,8 +559,10 @@ class Register(ArgSchemaParser):
         aligned_image = aligned_image.reorient_image2(ants.get_orientation(ants_ccf))
         return aligned_image.numpy(), percentile_values
 
-    def reverse_atlas_alignment(
-        self, ants_img,
+    ### THIS FUNCTION NEEDS TO BE REWRITEN TO AVOID DOUBLE TRANSFORM!
+    def invert_atlas_alignment( # Renamed from "reverse_atlas_alignment"
+        self, 
+        ants_img,
         ants_params: dict,
         ccf_type: str
     ):
@@ -593,7 +603,8 @@ class Register(ArgSchemaParser):
             interpolator = "linear"
         elif ccf_type == "annotation":
             ants_ccf = ants.image_read(
-                os.path.abspath(self.args["ccf_annotation_path"])
+                os.path.abspath(self.args["ccf_annotation_path"]),
+                pixel_type = 'unsigned int',
             )
             interpolator = "genericLabel"
         else:
@@ -610,22 +621,7 @@ class Register(ArgSchemaParser):
         logger.info(f"{'=='*40}")
         logger.info("Start registering CCF to template space....")
         logger.info(f"{'=='*40}")
-
-        # apply transform
-        aligned_image = ants.apply_transforms(
-            fixed=ants_template,
-            moving=ants_ccf,
-            transformlist=self.args["ccf_to_template_transform_path"],
-            whichtoinvert=[True, False],
-        )
-
-        # ----------------------------------#
-        # register CCF in template space to brain space
-        # ----------------------------------#
-        logger.info(f"{'=='*40}")
-        logger.info("Start registering CCF from template to brain space....")
-        logger.info(f"{'=='*40}")
-
+        
         template_to_brain_transform_path = [
             f"{self.args['results_folder']}/ls_to_template_SyN_0GenericAffine.mat",
             f"{self.args['results_folder']}/ls_to_template_SyN_1InverseWarp.nii.gz",
@@ -634,27 +630,22 @@ class Register(ArgSchemaParser):
         # apply transform
         aligned_image = ants.apply_transforms(
             fixed=ants_img,
-            moving=aligned_image,
-            transformlist=template_to_brain_transform_path,
-            interpolator=interpolator,
-            whichtoinvert=[True, False],
+            moving=ants_ccf,
+            transformlist=template_to_brain_transform_path+ self.args["ccf_to_template_transform_path"],
+            whichtoinvert=[True, False,True, False],
         )
 
+        aligned_image = aligned_image.reorient_image2(ants_ccf.orientation)
+        
         aligned_image_array = aligned_image.numpy()
 
-        aligned_image_out, _ = rotate_image(
-            aligned_image_array,
-            in_mat,
-            reverse=True,
-        )
-
-        visual_spacing = tuple([s * 1000 for s in ants_params["spacing"]])
+        visual_spacing = tuple([s * 1000 for s in aligned_image.spacing])
 
         return aligned_image_out, visual_spacing
 
-    def reverse_annotation_alignment(
+    def invert_ccf_annotation_alignment(
         self,
-        img_array: np.array,
+        ants_img,
         ants_params: dict,
         ng_params: dict,
     ):
@@ -683,7 +674,7 @@ class Register(ArgSchemaParser):
 
         logger.info("Reading annotation image")
         ants_annotation = ants.image_read(
-            os.path.abspath(self.args["ccf_annotation_to_template_moved_path"])
+            os.path.abspath(self.args["ccf_annoation_path"]),pixeltype = 'unsigned int'
         )
 
         # ----------------------------------#
@@ -697,54 +688,37 @@ class Register(ArgSchemaParser):
             f"{self.args['results_folder']}/ls_to_template_SyN_0GenericAffine.mat",
             f"{self.args['results_folder']}/ls_to_template_SyN_1InverseWarp.nii.gz",
         ]
-
-        img_out, in_mat, out_mat = check_orientation(
-            img_array,
-            self.args["input_orientation"],
-            ants_params["template_orientations"],
-        )
-
-        spacing_order = np.where(in_mat)[1]
-        img_spacing = tuple([ants_params["spacing"][s] for s in spacing_order])
-
-        img_out = img_out.astype(np.double)
-        ants_img = ants.from_numpy(img_out, spacing=img_spacing)
-        ants_img.set_direction(ants_annotation.direction)
-        ants_img.set_origin(ants_annotation.origin)
-
+        
+        
         # apply transform
         aligned_image = ants.apply_transforms(
             fixed=ants_img,
             moving=ants_annotation,
-            transformlist=template_to_brain_transform_path,
+            transformlist=template_to_brain_transform_path + self.args['ccf_template_transform_path'],
             interpolator="genericLabel",
-            whichtoinvert=[True, False],
+            whichtoinvert=[True, False, True, False],
         )
+        ants.image_write(aligned_image,'/results/ccf_annotation_in_mouse_test.nii.gz',)
+
+        ## Edited to remove non-ants numpy image hacks!
+        ## NEED TO CHECK THAT THE OUTPUT IS AS EXPECTED!!
+        aligned_image = ants.reorient_image2(ants_annotation.orientation)
 
         aligned_image_array = aligned_image.numpy()
 
-        aligned_image_out, _ = rotate_image(
-            aligned_image_array,
-            in_mat,
-            reverse=True,
-        )
-
-        # because precomputed builds xyz nor zyx
-        aligned_image_out = np.swapaxes(aligned_image_out, 0, 2)
-
         visual_spacing = tuple(
-            [s * 10**6 for s in ants_params["spacing"][::-1]]
+            [s * 10**6 for s in aligned_image.spacing]
         )
 
         ng_params["scale_params"]["res"] = visual_spacing
         ng_params["scale_params"]["dims"] = [
-            dim for dim in aligned_image_out.shape
+            dim for dim in aligned_image_array.shape
         ]
 
         seg = create_precomputed(ng_params)
         seg.create_segmentation_info()
         seg.build_precomputed_info()
-        seg.create_segment_precomputed(aligned_image_out)
+        seg.create_segment_precomputed(aligned_image_array)
 
         return
 
@@ -794,17 +768,13 @@ class Register(ArgSchemaParser):
         ]
 
         # apply transform to template
-        aligned_image = ants.apply_transforms(
-            fixed=ants_template,
-            moving=ants_img,
-            transformlist=ls_to_template_transform_path,
-        )
-
+        # EDITED TO BE ONE STEP
         aligned_image = ants.apply_transforms(
             fixed=ants_ccf,
-            moving=aligned_image,
-            transformlist=self.args["template_to_ccf_transform_path"],
+            moving=ants_img,
+            transformlist=self.args["template_to_ccf_transform_path"]+ls_to_template_transform_path,
         )
+
         aligned_image = aligned_image.reorient_image2(ants.get_orientation(ants_ccf))
         return aligned_image
 
@@ -970,7 +940,6 @@ class Register(ArgSchemaParser):
             )
 
         start_date_time = datetime.now()
-        #img_array = self.__read_zarr_image(image_path)
         # Make a metadata object from input schema.
         if self.args["reference_res"]==25:
             level = 3
@@ -1097,8 +1066,8 @@ class Register(ArgSchemaParser):
         )
 
         # reverse transform annotation map
-        self.reverse_annotation_alignment(
-            img_array, ants_params, self.args["ng_params"]
+        self.invert_ccf_annotation_alignment(
+            ants_image, ants_params, self.args["ng_params"]
         )
 
         end_date_time = datetime.now()

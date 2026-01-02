@@ -19,7 +19,7 @@ RUN pip install -U --no-cache-dir \
     tifffile==2022.10.10 \
     bokeh==3.6.3 \
     aind-data-schema==1.0.0 \
-    xarray_multiscale==1.2.0 \
+    xarray_multiscale==2.1.0 \
     dask[array]==2024.9.0 \
     distributed==2024.9.0 \
     cloud-volume[all_codecs]==11.0.2 \
