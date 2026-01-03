@@ -520,18 +520,13 @@ class Register(ArgSchemaParser):
         aligned_image = self.register_to_ccf(ants_ccf, aligned_image)
 
         # ----------------------------------#
-        # register CCF annotation to brain space
+        # Move CCF annotation to brain space
         # ----------------------------------#
         logger.info(f"{'=='*40}")
         logger.info("Start registering CCF annotation to brain space....")
         logger.info(f"{'=='*40}")
 
-        ccf_annotation = ants.image_read(self.arg[""])
-
-        # Editing to fix 
-        # ccf_anno_to_template_deformed = ants.image_read(
-        #     self.args["ccf_annotation_to_template_moved_path"]
-        # )
+        ccf_annotation = ants.image_read(self.args["ccf_annotation_path"],pixel_type='unsigned int')
 
         template_to_brain_transform_path = [
             f"{self.args['results_folder']}/ls_to_template_SyN_0GenericAffine.mat",
@@ -539,13 +534,13 @@ class Register(ArgSchemaParser):
         ]
 
         # apply transform
-        ccf_anno_to_brain_deformed = ants.apply_transforms(
+        aligned_image = ants.apply_transforms(
             fixed=ants_img,
-            moving=ccf_anno_to_template_deformed,
-            transformlist=template_to_brain_transform_path,
-            whichtoinvert=[True, False],
-            interpolator="genericLabel",
+            moving=ccf_annotation,
+            transformlist=template_to_brain_transform_path+ self.args["ccf_to_template_transform_path"],
+            whichtoinvert=[True, False,True, False],
         )
+
 
         self._plot_write_antsimg(
             ccf_anno_to_brain_deformed,
@@ -559,7 +554,6 @@ class Register(ArgSchemaParser):
         aligned_image = aligned_image.reorient_image2(ants.get_orientation(ants_ccf))
         return aligned_image.numpy(), percentile_values
 
-    ### THIS FUNCTION NEEDS TO BE REWRITEN TO AVOID DOUBLE TRANSFORM!
     def invert_atlas_alignment( # Renamed from "reverse_atlas_alignment"
         self, 
         ants_img,
