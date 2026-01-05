@@ -526,7 +526,7 @@ class Register(ArgSchemaParser):
         logger.info("Start registering CCF annotation to brain space....")
         logger.info(f"{'=='*40}")
 
-        ccf_annotation = ants.image_read(self.args["ccf_annotation_path"],pixel_type='unsigned int')
+        ccf_annotation = ants.image_read(self.args["ccf_annotation_path"],pixeltype='unsigned int')
 
         template_to_brain_transform_path = [
             f"{self.args['results_folder']}/ls_to_template_SyN_0GenericAffine.mat",

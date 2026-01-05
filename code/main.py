@@ -279,7 +279,7 @@ def main() -> None:
         f"{data_folder}/allen_mouse_ccf/average_template/average_template_25.nii.gz"
     )
     ccf_annotation_path = os.path.abspath(
-        f"{data_folder}/allen_mouse_ccf/annoation/ccf_2017/annoation_25.nii.gz")
+        f"{data_folder}/allen_mouse_ccf/annotation/ccf_2017/annotation_25.nii.gz")
 
     template_to_ccf_transform_warp_path = os.path.abspath(
         f"{data_folder}/lightsheet_template_ccf_registration/spim_template_to_ccf_syn_1Warp.nii.gz"
