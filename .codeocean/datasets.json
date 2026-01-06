@@ -14,6 +14,10 @@
 			"mount": "lightsheet_template_ccf_registration"
 		},
 		{
+			"id": "d5f9aaf7-a8c2-4f74-95de-13e86ae95ae9",
+			"mount": "spim_template_to_ccf"
+		},
+		{
 			"id": "ef57fdac-7980-482d-8700-069adff0ec0c",
 			"mount": "SmartSPIM_693196_2023-09-28_23-12-22_stitched_2024-01-11_10-23-15"
 		}

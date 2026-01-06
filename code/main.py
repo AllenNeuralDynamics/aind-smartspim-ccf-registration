@@ -273,7 +273,7 @@ def main() -> None:
     # ---------------------------------------------------#
     # path to SPIM template, CCF and template-to-CCF registration
     template_path = os.path.abspath(
-        f"{data_folder}/lightsheet_template_ccf_registration/smartspim_lca_template_25.nii.gz"
+        f"{data_folder}/smartspim_lca_template/smartspim_lca_template_25.nii.gz"
     )
     ccf_reference_path = os.path.abspath(
         f"{data_folder}/allen_mouse_ccf/average_template/average_template_25.nii.gz"
@@ -282,10 +282,10 @@ def main() -> None:
         f"{data_folder}/allen_mouse_ccf/annotation/ccf_2017/annotation_25.nii.gz")
 
     template_to_ccf_transform_warp_path = os.path.abspath(
-        f"{data_folder}/lightsheet_template_ccf_registration/spim_template_to_ccf_syn_1Warp.nii.gz"
+        f"{data_folder}/spim_template_to_ccf/syn_1Warp.nii.gz"
     )
     template_to_ccf_transform_affine_path = os.path.abspath(
-        f"{data_folder}/lightsheet_template_ccf_registration/spim_template_to_ccf_syn_0GenericAffine.mat"
+        f"{data_folder}/spim_template_to_ccf/syn_0GenericAffine.mat"
     )
     template_to_ccf_transform_path = [
         template_to_ccf_transform_warp_path,
@@ -296,7 +296,7 @@ def main() -> None:
     )
 
     ccf_to_template_transform_warp_path = os.path.abspath(
-        f"{data_folder}/lightsheet_template_ccf_registration/spim_template_to_ccf_syn_1InverseWarp_25.nii.gz"
+        f"{data_folder}/spim_template_to_ccf/syn_1InverseWarp.nii.gz"
     )
 
     ccf_to_template_transform_path = [
@@ -308,9 +308,10 @@ def main() -> None:
         f"ccf_to_template_transform_path: {ccf_to_template_transform_path}"
     )
 
-    ccf_annotation_to_template_moved_path = os.path.abspath(
-        f"{data_folder}/lightsheet_template_ccf_registration/ccf_annotation_to_template_moved.nii.gz"
-    )
+    # Legacy - should be removed.
+    # ccf_annotation_to_template_moved_path = os.path.abspath(
+    #     f"{data_folder}/lightsheet_template_ccf_registration/ccf_annotation_to_template_moved.nii.gz"
+    # )
 
     if not os.path.isfile(template_path):
         raise FileNotFoundError(
@@ -332,10 +333,10 @@ def main() -> None:
             f"template_to_ccf_transform_affine_path {template_to_ccf_transform_affine_path} not exist, please provide valid path"
         )
 
-    if not os.path.isfile(ccf_annotation_to_template_moved_path):
-        raise FileNotFoundError(
-            f"ccf_annotation_to_template_moved_path {ccf_annotation_to_template_moved_path} not exist, please provide valid path"
-        )
+    # if not os.path.isfile(ccf_annotation_to_template_moved_path):
+    #     raise FileNotFoundError(
+    #         f"ccf_annotation_to_template_moved_path {ccf_annotation_to_template_moved_path} not exist, please provide valid path"
+    #     )
 
     # ---------------------------------------------------#
 
@@ -362,7 +363,7 @@ def main() -> None:
         "ccf_annotation_path":ccf_annotation_path,
         "template_to_ccf_transform_path": template_to_ccf_transform_path,
         "ccf_to_template_transform_path": ccf_to_template_transform_path,
-        "ccf_annotation_to_template_moved_path": ccf_annotation_to_template_moved_path,
+        #"ccf_annotation_to_template_moved_path": template_to_ccf_transform_warp_path,
         "reference_res": 25,
         "output_data": os.path.abspath(f"{results_folder}/OMEZarr"),
         "metadata_folder": metadata_folder,
