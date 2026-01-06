@@ -529,9 +529,9 @@ class Register(ArgSchemaParser):
 
         sidecar = make_syn_sidecar(fixed_image_header = fixed_image_header,
                         moving_image_header = moving_image_header,
-                        affine = f"{self.args['results_folder']}/ls_to_template_SyN_0GenericAffine.mat",
-                        warp = f"{self.args['results_folder']}/ls_to_template_SyN_1Warp.nii.gz",
-                        inverse_warp = f"{self.args['results_folder']}/ls_to_template_SyN_1InverseWarp.nii.gz",
+                        affine = f"ls_to_template_SyN_0GenericAffine.mat",
+                        warp = f"ls_to_template_SyN_1Warp.nii.gz",
+                        inverse_warp = f"ls_to_template_SyN_1InverseWarp.nii.gz",
                     )
         
         with open(f"{self.args['results_folder']}/ls_to_template_transform_information.json", "w") as f:
