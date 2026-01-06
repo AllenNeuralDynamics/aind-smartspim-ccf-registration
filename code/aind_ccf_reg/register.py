@@ -48,6 +48,8 @@ from aind_registration_utils.domains import ImageHeader
 from aind_registration_utils.domains import make_syn_sidecar
 from aind_ants_transform_sidecar.sidecar import dump_package
 
+from ants.core.ants_image import ANTsImage
+
 LOG_FMT = "%(asctime)s %(message)s"
 LOG_DATE_FMT = "%Y-%m-%d %H:%M"
 
@@ -229,8 +231,8 @@ class Register(ArgSchemaParser):
 
     def register_to_template(
         self,
-        ants_fixed,
-        ants_moving,
+        ants_fixed:ANTsImage,
+        ants_moving:ANTsImage,
         moving_mask=None,
     ):
         """
@@ -386,64 +388,12 @@ class Register(ArgSchemaParser):
             figpath_name=reg_task,
         )
 
-
-        ### ADD SIDECAR HERE!!!! ###
-        
-
-        ############################
-
         return ants_moved
 
-    def register_to_ccf(self, ants_fixed, ants_moving):
-        """
-        Run manual regsitration to align brain image to CCF template
-
-        Parameters
-        -------------
-        ants_fixed: ANTsImage
-            fixed image
-        ants_moving: ANTsImage
-            moving image
-
-        Returns
-        -----------
-        ANTsImage
-            deformed image
-        """
-        logger.info("Start registering to CCF ....")
-        logger.info(
-            f"Register to CCF with: {self.args['template_to_ccf_transform_path']}"
-        )
-
-        # for visualizing registration results
-        ants_fixed, percentile_values = perc_normalization(ants_fixed)
-
-        start_time = datetime.now()
-        ants_moved = ants.apply_transforms(
-            fixed=ants_fixed,
-            moving=ants_moving,
-            transformlist=self.args["template_to_ccf_transform_path"],
-        )
-        end_time = datetime.now()
-
-        logger.info(
-            f"Register to CCF, execution time: {end_time - start_time} s -- image {ants_moved}"
-        )
-
-        reg_task = "reg_to_ccf"
-        self._qc_reg(
-            ants_moving,
-            ants_fixed,
-            ants_moved,
-            moved_path=self.args["ants_params"].get("moved_to_ccf_path"),
-            figpath_name=reg_task,
-        )
-
-        return ants_moved
 
     def atlas_alignment(
         self, 
-        ants_img, 
+        ants_img:ANTsImage, 
         ants_params: dict
     ) -> Tuple[np.array, List]:
         """
@@ -457,8 +407,8 @@ class Register(ArgSchemaParser):
 
         Parameters
         ------------
-        img_array: np.array
-            Array with the image
+        ants_img: ANTsImage
+           image to register
 
         ants_params: dict
             Dictionary with ants parameters
@@ -571,9 +521,9 @@ class Register(ArgSchemaParser):
         aligned_image = aligned_image.reorient_image2(ants.get_orientation(ants_ccf))
         return aligned_image.numpy(), percentile_values
 
-    def invert_atlas_alignment( # Renamed from "reverse_atlas_alignment"
+    def invert_atlas_alignment(
         self, 
-        ants_img,
+        ants_img: ANTsImage,
         ants_params: dict,
         ccf_type: str
     ):
@@ -583,8 +533,8 @@ class Register(ArgSchemaParser):
 
         Parameters
         ----------
-        img_array : np.array
-            Array from the original image
+        ants_img : ANTsImage
+            Image to warp CCF onto
         ants_params : dict
             Dictionary with ants parameters
         ccf_type : str
@@ -656,7 +606,7 @@ class Register(ArgSchemaParser):
 
     def invert_ccf_annotation_alignment(
         self,
-        ants_img,
+        ants_img: ANTsImage,
         ants_params: dict,
         ng_params: dict,
     ):
@@ -666,8 +616,8 @@ class Register(ArgSchemaParser):
 
         Parameters
         ----------
-        img_array : np.array
-            Array with the image
+        ants_img : ANTsImage
+            Image to transform onto 
         ants_params: dict
             Parameters for registering image
         ng_params: dict
@@ -735,7 +685,7 @@ class Register(ArgSchemaParser):
 
     def apply_transforms_to_additional_channels(
         self,
-        ants_img, 
+        ants_img:ANTsImage, 
         ants_params: dict,
     ):
         """
@@ -743,8 +693,8 @@ class Register(ArgSchemaParser):
 
         Parameters
         ----------
-        img_array : np.array
-            Array with the image
+        ants_img : ANTsImage
+            Image to apply transform to.
         ants_params: dict
             Parameters for registering image
 
@@ -912,7 +862,7 @@ class Register(ArgSchemaParser):
         metadata_path = os.path.abspath(self.args["metadata_folder"])
         reg_folder = os.path.abspath(
             self.args["reg_folder"]
-        )  # save registration results
+        ) 
 
         logger.info(
             f"Input data: {input_data_path}\nOutput data: {output_data_path}\nMetadata path: {metadata_path}"
