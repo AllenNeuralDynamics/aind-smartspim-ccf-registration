@@ -343,10 +343,12 @@ class Register(ArgSchemaParser):
 
         logger.info("Start registering to template ....")
 
+        # This should be more convergence steps than are needed,
+        # The idea here being to ensure that the algorithm actually converges
         if self.args["reference_res"] == 25:
-            reg_iterations = [1,1,1,1]#[3000, 3000, 3000, 3000] # Hack for debugging - remove in production
+            reg_iterations = [3000, 3000, 3000, 3000]
         elif self.args["reference_res"] == 10:
-            reg_iterations = [1,1,1,1]#[3000, 3000, 3000, 3000]
+            reg_iterations = [3000, 3000, 3000, 3000]
         else:
             raise ValueError(
                 f"Resolution {self.args['reference_res']} is not allowed. Allowed values are: 10, 25"
