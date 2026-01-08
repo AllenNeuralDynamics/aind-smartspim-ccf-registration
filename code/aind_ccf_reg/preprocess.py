@@ -184,7 +184,7 @@ class Preprocess:
     3. intensity normalization
     """
 
-    def __init__(self, args, input_data, reference_data):
+    def __init__(self, args, input_data,): 
         """Initialize Preprocess class.
         Parameters
         ----------
@@ -192,12 +192,9 @@ class Preprocess:
             Dictionary with preprocessing parameters
         input_data: ANTsImage
             image to be processed
-        reference_data: ANTsImage
-            spim template
         """
         self.args = args
         self.input_data = input_data
-        self.reference_data = reference_data
 
     def resample(self, ants_img, ants_template):
         """Resample OMEZarr image to the resolution of template"""
@@ -271,7 +268,7 @@ class Preprocess:
 
         logger.info(f"Parameters -> {n4_bias_params}")
         start_time = datetime.now()
-        ants_img_n4 = ants.utils.n4_bias_field_correction(
+        ants_img_n4 = ants.n4_bias_field_correction(
             ants_img, **n4_bias_params
         )
         end_time = datetime.now()
@@ -329,7 +326,7 @@ class Preprocess:
         """
         start_date_time = datetime.now()
 
-        ants_img = self.resample(self.input_data, self.reference_data)
+        ants_img = self.input_data # Removed resampling! 
         ants_img_mask = self.compute_mask(ants_img)
         ants_img = ants_img * ants_img_mask
         ants_img = self.compute_N4(ants_img, mask=ants_img_mask)

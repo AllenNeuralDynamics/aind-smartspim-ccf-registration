@@ -42,6 +42,14 @@ from aind_ccf_reg.utils import (check_orientation, create_folder,
                                 create_precomputed, generate_processing,
                                 rotate_image)
 
+from aind_zarr_utils.zarr import zarr_to_ants
+
+from aind_registration_utils.domains import ImageHeader
+from aind_registration_utils.domains import make_syn_sidecar
+from aind_ants_transform_sidecar.sidecar import dump_package
+
+from ants.core.ants_image import ANTsImage
+
 LOG_FMT = "%(asctime)s %(message)s"
 LOG_DATE_FMT = "%Y-%m-%d %H:%M"
 
@@ -49,6 +57,12 @@ logging.basicConfig(format=LOG_FMT, datefmt=LOG_DATE_FMT)
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
+def _pkg_version(dist_name: str) -> str:
+    try:
+        from importlib.metadata import version
+        return version(dist_name)
+    except Exception:
+        return "unknown"
 
 def pad_array_n_d(arr: ArrayLike, dim: int = 5) -> ArrayLike:
     """
@@ -123,7 +137,7 @@ def get_pyramid_metadata() -> dict:
             "description": """Downscaling implementation based on the
                 windowed mean of the original array""",
             "method": "xarray_multiscale.reducers.windowed_mean",
-            "version": str(xarray_multiscale.__version__),
+            "version": str(_pkg_version("xarray-multiscale")),
             "args": "[false]",
             # No extra parameters were used different
             # from the orig. array and scales
@@ -138,26 +152,6 @@ class Register(ArgSchemaParser):
     """
 
     default_schema = RegSchema
-
-    def __read_zarr_image(self, image_path: PathLike) -> np.array:
-        """
-        Reads a zarr image
-
-        Parameters
-        -------------
-        image_path: PathLike
-            Path where the zarr image is located
-
-        Returns
-        -------------
-        np.array
-            Numpy array with the zarr image
-        """
-        image_path = str(image_path)
-        zarr_img = zarr.open(image_path, mode="r")
-        img_array = np.asarray(zarr_img)
-        img_array = np.squeeze(img_array)
-        return img_array
 
     def _plot_write_antsimg(
         self,
@@ -206,7 +200,8 @@ class Register(ArgSchemaParser):
         if figpath_name:
             figpath = f"{self.args['reg_folder']}/{figpath_name}"
             logger.info(f"Plot registration results: {figpath}")
-
+            
+            # This step is likely unnecessary, test plotting code then remove.
             if np.any(ants_moving.direction != ants_fixed.direction):
                 logger.info(
                     "Reorient moving image direction to fixed image direction ..."
@@ -236,8 +231,8 @@ class Register(ArgSchemaParser):
 
     def register_to_template(
         self,
-        ants_fixed,
-        ants_moving,
+        ants_fixed:ANTsImage,
+        ants_moving:ANTsImage,
         moving_mask=None,
     ):
         """
@@ -348,10 +343,12 @@ class Register(ArgSchemaParser):
 
         logger.info("Start registering to template ....")
 
+        # This should be more convergence steps than are needed,
+        # The idea here being to ensure that the algorithm actually converges
         if self.args["reference_res"] == 25:
-            reg_iterations = [200, 100, 25, 3]
+            reg_iterations = [1,1,1,1]#[3000, 3000, 3000, 3000]
         elif self.args["reference_res"] == 10:
-            reg_iterations = [400, 200, 40, 0]
+            reg_iterations = [1,1,1,1]#[3000, 3000, 3000, 3000]
         else:
             raise ValueError(
                 f"Resolution {self.args['reference_res']} is not allowed. Allowed values are: 10, 25"
@@ -395,55 +392,11 @@ class Register(ArgSchemaParser):
 
         return ants_moved
 
-    def register_to_ccf(self, ants_fixed, ants_moving):
-        """
-        Run manual regsitration to align brain image to CCF template
-
-        Parameters
-        -------------
-        ants_fixed: ANTsImage
-            fixed image
-        ants_moving: ANTsImage
-            moving image
-
-        Returns
-        -----------
-        ANTsImage
-            deformed image
-        """
-        logger.info("Start registering to CCF ....")
-        logger.info(
-            f"Register to CCF with: {self.args['template_to_ccf_transform_path']}"
-        )
-
-        # for visualizing registration results
-        ants_fixed, percentile_values = perc_normalization(ants_fixed)
-
-        start_time = datetime.now()
-        ants_moved = ants.apply_transforms(
-            fixed=ants_fixed,
-            moving=ants_moving,
-            transformlist=self.args["template_to_ccf_transform_path"],
-        )
-        end_time = datetime.now()
-
-        logger.info(
-            f"Register to CCF, execution time: {end_time - start_time} s -- image {ants_moved}"
-        )
-
-        reg_task = "reg_to_ccf"
-        self._qc_reg(
-            ants_moving,
-            ants_fixed,
-            ants_moved,
-            moved_path=self.args["ants_params"].get("moved_to_ccf_path"),
-            figpath_name=reg_task,
-        )
-
-        return ants_moved
 
     def atlas_alignment(
-        self, img_array: np.array, ants_params: dict
+        self, 
+        ants_img:ANTsImage, 
+        ants_params: dict
     ) -> Tuple[np.array, List]:
         """
         Register an lightsheet volume to the CCF Allen atlas via the SPIM template
@@ -456,8 +409,8 @@ class Register(ArgSchemaParser):
 
         Parameters
         ------------
-        img_array: np.array
-            Array with the image
+        ants_img: ANTsImage
+           image to register
 
         ants_params: dict
             Dictionary with ants parameters
@@ -482,32 +435,6 @@ class Register(ArgSchemaParser):
         logger.info(f"Loaded SPIM template {ants_template}")
         logger.info(f"Loaded CCF template {ants_ccf}")
 
-        # ----------------------------------#
-        # orient data to SPIM template's direction
-        # ----------------------------------#
-
-        img_array = img_array.astype(np.double)
-        logger.info(f"Image array DR: {img_array.min()} - {img_array.max()}")
-        img_out, in_mat, out_mat = check_orientation(
-            img_array,
-            self.args["input_orientation"],
-            self.args["ants_params"]["template_orientations"],
-        )
-
-        logger.info(
-            f"Input image dimensions: {img_array.shape} \nInput image orientation: {in_mat}"
-        )
-        logger.info(
-            f"Output image dimensions: {img_out.shape} \nOutput image orientation: {out_mat}"
-        )
-
-        spacing_order = np.where(in_mat)[1]
-        img_spacing = tuple([ants_params["spacing"][s] for s in spacing_order])
-
-        ants_img = ants.from_numpy(img_out, spacing=img_spacing)
-        ants_img.set_direction(ants_template.direction)
-        ants_img.set_origin(ants_template.origin)
-
         logger.info(f"Input image info: {ants_img}")
 
         write_and_plot_image(
@@ -525,7 +452,7 @@ class Register(ArgSchemaParser):
         logger.info("Start preprocessing....")
         logger.info(f"{'=='*40}")
 
-        prep = Preprocess(self.args, ants_img, ants_template)
+        prep = Preprocess(self.args, ants_img)
         ants_img, percentile_values = prep.run()
         logger.info(f"Preprocessed input data {ants_img}")
         logger.info(f"percentile values: {percentile_values}")
@@ -537,59 +464,69 @@ class Register(ArgSchemaParser):
         logger.info("Start registering brain image to template....")
         logger.info(f"{'=='*40}")
 
-        # ants_img = ants.image_read(self.args["prep_params"].get("percNorm_path")) #
-
         # register to SPIM template: rigid + affine + SyN
         aligned_image = self.register_to_template(ants_template, ants_img)
 
         # ----------------------------------#
-        # register brain image to CCF
+        # Add "Sidecar" metadata
         # ----------------------------------#
         logger.info(f"{'=='*40}")
-        logger.info("Start registering brain image to CCF....")
+        logger.info("Generating transform reference data (sidecar)")
         logger.info(f"{'=='*40}")
+        
+        fixed_image_header = ImageHeader.from_ants(ants_template)
+        moving_image_header = ImageHeader.from_ants(ants_img)
 
-        # aligned_image = ants.image_read(self.args["ants_params"].get("moved_to_template_path")) #
+        sidecar = make_syn_sidecar(fixed_image_header = fixed_image_header,
+                        moving_image_header = moving_image_header,
+                        affine = f"ls_to_template_SyN_0GenericAffine.mat",
+                        warp = f"ls_to_template_SyN_1Warp.nii.gz",
+                        inverse_warp = f"ls_to_template_SyN_1InverseWarp.nii.gz",
+                    )
+        
+        with open(f"{self.args['results_folder']}/ls_to_template_transform_information.json", "w") as f:
+            f.write(dump_package(sidecar))
 
-        # register to CCF template: apply manual regsitration
-        aligned_image = self.register_to_ccf(ants_ccf, aligned_image)
+        # # ----------------------------------#
+        # # Move CCF annotation to brain space
+        # # ----------------------------------#
+        # logger.info(f"{'=='*40}")
+        # logger.info("Warping CCF annotation to brain space....")
+        # logger.info(f"{'=='*40}")
 
-        # ----------------------------------#
-        # register CCF annotation to brain space
-        # ----------------------------------#
-        logger.info(f"{'=='*40}")
-        logger.info("Start registering CCF annotation to brain space....")
-        logger.info(f"{'=='*40}")
+        # ccf_annotation = ants.image_read(self.args["ccf_annotation_path"],pixeltype='unsigned int')
+        # ccf_reference = ants.image_read(self.args["ccf_reference_path"])
 
-        ccf_anno_to_template_deformed = ants.image_read(
-            self.args["ccf_annotation_to_template_moved_path"]
-        )
+        # template_to_brain_transform_path = [
+        #     f"{self.args['results_folder']}/ls_to_template_SyN_0GenericAffine.mat",
+        #     f"{self.args['results_folder']}/ls_to_template_SyN_1InverseWarp.nii.gz",
+        # ]
 
-        template_to_brain_transform_path = [
-            f"{self.args['results_folder']}/ls_to_template_SyN_0GenericAffine.mat",
-            f"{self.args['results_folder']}/ls_to_template_SyN_1InverseWarp.nii.gz",
-        ]
+        # # apply transform
+        # aligned_image = ants.apply_transforms(
+        #     fixed=ants_img,
+        #     moving=ccf_annotation,
+        #     transformlist=template_to_brain_transform_path+ self.args["ccf_to_template_transform_path"],
+        #     whichtoinvert=[True, False,True, False],
+        # )
 
-        # apply transform
-        ccf_anno_to_brain_deformed = ants.apply_transforms(
-            fixed=ants_img,
-            moving=ccf_anno_to_template_deformed,
-            transformlist=template_to_brain_transform_path,
-            whichtoinvert=[True, False],
-            interpolator="genericLabel",
-        )
-
-        self._plot_write_antsimg(
-            ccf_anno_to_brain_deformed,
-            self.args["ants_params"]["ccf_anno_to_brain_path"],
-            vmin=0,
-            vmax=None,
-        )
-
+        # self._plot_write_antsimg(
+        #     aligned_image,
+        #     self.args["ants_params"]["ccf_anno_to_brain_path"],
+        #     vmin=0,
+        #     vmax=1200,
+        # )
+        
+        # # Return a CCF-orientated numpy image. 
+        # # Orientation matters for Zarr creation, since zarr images are not anatomically aware.
+        aligned_image = aligned_image.reorient_image2(ants.get_orientation(ants_ccf))
         return aligned_image.numpy(), percentile_values
 
-    def reverse_atlas_alignment(
-        self, img_array: np.array, ants_params: dict, ccf_type: str
+    def invert_atlas_alignment(
+        self, 
+        ants_img: ANTsImage,
+        ants_params: dict,
+        ccf_type: str
     ):
         """
         Takes the CCF template and registers it back into the image's
@@ -597,8 +534,8 @@ class Register(ArgSchemaParser):
 
         Parameters
         ----------
-        img_array : np.array
-            Array from the original image
+        ants_img : ANTsImage
+            Image to warp CCF onto
         ants_params : dict
             Dictionary with ants parameters
         ccf_type : str
@@ -616,10 +553,7 @@ class Register(ArgSchemaParser):
         # load SPIM template + CCF
         # ----------------------------------#
 
-        logger.info("Reading reference images")
-        ants_template = ants.image_read(
-            os.path.abspath(self.args["template_path"])
-        )  # SPIM template
+        logger.info("Reading reference images (ccf)")
 
         if ccf_type == "reference":
             ants_ccf = ants.image_read(
@@ -628,82 +562,50 @@ class Register(ArgSchemaParser):
             interpolator = "linear"
         elif ccf_type == "annotation":
             ants_ccf = ants.image_read(
-                os.path.abspath(self.args["ccf_annotation_path"])
+                os.path.abspath(self.args["ccf_annotation_path"]),
+                pixel_type = 'unsigned int',
             )
             interpolator = "genericLabel"
         else:
             raise ValueError(
                 f"{ccf_type} is not a known CCF type. Options are 'reference' or 'annotation'"
             )
-
-        logger.info(f"Loaded SPIM template {ants_template}")
         logger.info(f"Loaded CCF template {ants_ccf}")
 
         # ----------------------------------#
-        # register CCF to template space
+        # Move CCF to individual space
         # ----------------------------------#
         logger.info(f"{'=='*40}")
         logger.info("Start registering CCF to template space....")
         logger.info(f"{'=='*40}")
-
-        # apply transform
-        aligned_image = ants.apply_transforms(
-            fixed=ants_template,
-            moving=ants_ccf,
-            transformlist=self.args["ccf_to_template_transform_path"],
-            whichtoinvert=[True, False],
-        )
-
-        # ----------------------------------#
-        # register CCF in template space to brain space
-        # ----------------------------------#
-        logger.info(f"{'=='*40}")
-        logger.info("Start registering CCF from template to brain space....")
-        logger.info(f"{'=='*40}")
-
+        
         template_to_brain_transform_path = [
             f"{self.args['results_folder']}/ls_to_template_SyN_0GenericAffine.mat",
             f"{self.args['results_folder']}/ls_to_template_SyN_1InverseWarp.nii.gz",
         ]
 
-        img_out, in_mat, out_mat = check_orientation(
-            img_array,
-            self.args["input_orientation"],
-            ants_params["template_orientations"],
-        )
-
-        spacing_order = np.where(in_mat)[1]
-        img_spacing = tuple([ants_params["spacing"][s] for s in spacing_order])
-
-        img_out = img_out.astype(np.double)
-        ants_img = ants.from_numpy(img_out, spacing=img_spacing)
-        ants_img.set_direction(ants_template.direction)
-        ants_img.set_origin(ants_template.origin)
-
         # apply transform
-        aligned_image = ants.apply_transforms(
+        ccf_in_image = ants.apply_transforms(
             fixed=ants_img,
-            moving=aligned_image,
-            transformlist=template_to_brain_transform_path,
-            interpolator=interpolator,
-            whichtoinvert=[True, False],
+            moving=ants_ccf,
+            transformlist=template_to_brain_transform_path+ self.args["ccf_to_template_transform_path"],
+            whichtoinvert=[True, False,True, False],
+            interpolator = interpolator,
         )
 
-        aligned_image_array = aligned_image.numpy()
+        ccf_in_image = ccf_in_image.reorient_image2(ants_ccf.orientation)
 
-        aligned_image_out, _ = rotate_image(
-            aligned_image_array,
-            in_mat,
-            reverse=True,
+        
+        self._plot_write_antsimg(
+            ccf_in_image,
+            self.args["ants_params"]["ccf_to_brain_path"],
         )
 
-        visual_spacing = tuple([s * 1000 for s in ants_params["spacing"]])
+        return aligned_image_out
 
-        return aligned_image_out, visual_spacing
-
-    def reverse_annotation_alignment(
+    def invert_ccf_annotation_alignment(
         self,
-        img_array: np.array,
+        ants_img: ANTsImage,
         ants_params: dict,
         ng_params: dict,
     ):
@@ -713,8 +615,8 @@ class Register(ArgSchemaParser):
 
         Parameters
         ----------
-        img_array : np.array
-            Array with the image
+        ants_img : ANTsImage
+            Image to transform onto 
         ants_params: dict
             Parameters for registering image
         ng_params: dict
@@ -732,7 +634,7 @@ class Register(ArgSchemaParser):
 
         logger.info("Reading annotation image")
         ants_annotation = ants.image_read(
-            os.path.abspath(self.args["ccf_annotation_to_template_moved_path"])
+            os.path.abspath(self.args["ccf_annotation_path"]),pixeltype = 'unsigned int'
         )
 
         # ----------------------------------#
@@ -746,70 +648,58 @@ class Register(ArgSchemaParser):
             f"{self.args['results_folder']}/ls_to_template_SyN_0GenericAffine.mat",
             f"{self.args['results_folder']}/ls_to_template_SyN_1InverseWarp.nii.gz",
         ]
-
-        img_out, in_mat, out_mat = check_orientation(
-            img_array,
-            self.args["input_orientation"],
-            ants_params["template_orientations"],
-        )
-
-        spacing_order = np.where(in_mat)[1]
-        img_spacing = tuple([ants_params["spacing"][s] for s in spacing_order])
-
-        img_out = img_out.astype(np.double)
-        ants_img = ants.from_numpy(img_out, spacing=img_spacing)
-        ants_img.set_direction(ants_annotation.direction)
-        ants_img.set_origin(ants_annotation.origin)
-
+        
+        
         # apply transform
         aligned_image = ants.apply_transforms(
             fixed=ants_img,
             moving=ants_annotation,
-            transformlist=template_to_brain_transform_path,
+            transformlist=template_to_brain_transform_path + self.args['ccf_to_template_transform_path'],
             interpolator="genericLabel",
-            whichtoinvert=[True, False],
+            whichtoinvert=[True, False, True, False],
         )
+
+        ## Edited to remove non-ants numpy image hacks!
+        ## NEED TO CHECK THAT THE OUTPUT IS AS EXPECTED!!
+        aligned_image = ants.reorient_image2(aligned_image,ants_annotation.orientation)
 
         aligned_image_array = aligned_image.numpy()
 
-        aligned_image_out, _ = rotate_image(
-            aligned_image_array,
-            in_mat,
-            reverse=True,
+        self._plot_write_antsimg(
+            aligned_image,
+            self.args["ants_params"]["ccf_anno_to_brain_path"],
+            vmin=0,
+            vmax=1200,
         )
 
-        # because precomputed builds xyz nor zyx
-        aligned_image_out = np.swapaxes(aligned_image_out, 0, 2)
-
         visual_spacing = tuple(
-            [s * 10**6 for s in ants_params["spacing"][::-1]]
+            [s * 10**6 for s in aligned_image.spacing]
         )
 
         ng_params["scale_params"]["res"] = visual_spacing
         ng_params["scale_params"]["dims"] = [
-            dim for dim in aligned_image_out.shape
+            dim for dim in aligned_image_array.shape
         ]
 
         seg = create_precomputed(ng_params)
         seg.create_segmentation_info()
         seg.build_precomputed_info()
-        seg.create_segment_precomputed(aligned_image_out)
+        seg.create_segment_precomputed(aligned_image_array)
 
-        return
+        return aligned_image
 
-    def additional_channel_alignment(
+    def apply_transforms_to_additional_channels(
         self,
-        img_array: np.array,
+        ants_img:ANTsImage, 
         ants_params: dict,
     ):
         """
-        Registers additional channels that will be segmented into CCF space
-        using the transfroms from the original registration
+        Applys registration transforms to additional channels
 
         Parameters
         ----------
-        img_array : np.array
-            Array with the image
+        ants_img : ANTsImage
+            Image to apply transform to.
         ants_params: dict
             Parameters for registering image
 
@@ -833,31 +723,6 @@ class Register(ArgSchemaParser):
         logger.info(f"Loaded SPIM template {ants_template}")
         logger.info(f"Loaded CCF template {ants_ccf}")
 
-        # ----------------------------------#
-        # orient data to SPIM template's direction
-        # ----------------------------------#
-
-        img_array = img_array.astype(np.double)
-        logger.info(f"Image array DR: {img_array.min()} - {img_array.max()}")
-        img_out, in_mat, out_mat = check_orientation(
-            img_array,
-            self.args["input_orientation"],
-            ants_params["template_orientations"],
-        )
-
-        logger.info(
-            f"Input image dimensions: {img_array.shape} \nInput image orientation: {in_mat}"
-        )
-        logger.info(
-            f"Output image dimensions: {img_out.shape} \nOutput image orientation: {out_mat}"
-        )
-
-        spacing_order = np.where(in_mat)[1]
-        img_spacing = tuple([ants_params["spacing"][s] for s in spacing_order])
-
-        ants_img = ants.from_numpy(img_out, spacing=img_spacing)
-        ants_img.set_direction(ants_template.direction)
-        ants_img.set_origin(ants_template.origin)
 
         # ----------------------------------#
         # register image to ccf
@@ -869,18 +734,15 @@ class Register(ArgSchemaParser):
         ]
 
         # apply transform to template
-        aligned_image = ants.apply_transforms(
-            fixed=ants_template,
-            moving=ants_img,
-            transformlist=ls_to_template_transform_path,
-        )
-
+        # EDITED TO BE ONE STEP
         aligned_image = ants.apply_transforms(
             fixed=ants_ccf,
-            moving=aligned_image,
-            transformlist=self.args["template_to_ccf_transform_path"],
+            moving=ants_img,
+            transformlist=self.args["template_to_ccf_transform_path"]+ls_to_template_transform_path,
         )
 
+        # need to return numpy for zarr writing-->Get it in the correct orientation first.
+        aligned_image = aligned_image.reorient_image2(ants.get_orientation(ants_ccf))
         return aligned_image.numpy()
 
     def write_zarr(
@@ -1005,8 +867,7 @@ class Register(ArgSchemaParser):
         metadata_path = os.path.abspath(self.args["metadata_folder"])
         reg_folder = os.path.abspath(
             self.args["reg_folder"]
-        )  # save registration results
-        # input_data_path = glob(f"{input_data_path}_stitched_*/")[0]
+        ) 
 
         logger.info(
             f"Input data: {input_data_path}\nOutput data: {output_data_path}\nMetadata path: {metadata_path}"
@@ -1019,8 +880,10 @@ class Register(ArgSchemaParser):
         # read input data (lazy loading)
         # flake8: noqa: E501
         image_path = Path(input_data_path).joinpath(
-            f"{self.args['input_channel']}.zarr/{self.args['input_scale']}"
+            f"{self.args['input_channel']}.zarr"
         )
+        level  =self.args['input_scale']
+        
         logger.info(f"Going to read zarr: {image_path}")
 
         data_processes = []
@@ -1044,7 +907,20 @@ class Register(ArgSchemaParser):
             )
 
         start_date_time = datetime.now()
-        img_array = self.__read_zarr_image(image_path)
+        # Make a metadata object from input schema.
+        if self.args["reference_res"]==25:
+            level = 3
+        elif self.args["reference_res"]==10:
+            level = 2
+        
+        # To comply with metadata restrictions, we need to re-make the oreientatation
+        # Metadata
+        tmp_metadata = {'acquisition':{'axes':self.args['input_orientation']}}
+        
+        ants_image = zarr_to_ants(image_path,
+                                  nd_metadata = tmp_metadata,
+                                  level = level)
+        
         end_date_time = datetime.now()
 
         data_processes.append(
@@ -1066,14 +942,9 @@ class Register(ArgSchemaParser):
         # Atlas alignment
         start_date_time = datetime.now()
         ants_params = self.args["ants_params"]
-        ants_params["new_spacing"] = (
-            self.args["reference_res"],
-            self.args["reference_res"],
-            self.args["reference_res"],
-        )
 
         aligned_image, percentile_values = self.atlas_alignment(
-            img_array, ants_params
+            ants_image, ants_params
         )
         no_norm_aligned_image = invert_perc_normalization(
             aligned_image, percentile_values
@@ -1116,9 +987,7 @@ class Register(ArgSchemaParser):
             no_norm_aligned_image.min(),
             no_norm_aligned_image.max(),
         )
-        aligned_image_dask = da.moveaxis(
-            aligned_image_dask, [0, 1, 2], [2, 1, 0]
-        )
+        
         print(
             "After changing orientation: ",
             aligned_image_dask.shape,
@@ -1128,10 +997,14 @@ class Register(ArgSchemaParser):
             aligned_image_dask.dtype,
             no_norm_aligned_image.dtype,
         )
-
+        if self.args["reference_res"]==25:
+            new_spacing = [.025,.025,.025]
+        elif self.args["reference_res"]==10:
+            new_spacing = [.01,.01,.01]
+            
         self.write_zarr(
             img_array=aligned_image_dask,  # dask array
-            physical_pixel_sizes=ants_params["new_spacing"],
+            physical_pixel_sizes=new_spacing,
             output_path=output_data_path,
             image_name=image_name,
             opts=opts,
@@ -1152,7 +1025,7 @@ class Register(ArgSchemaParser):
                 code_url=self.args["code_url"],
                 code_version=__version__,
                 parameters={
-                    "pixel_sizes": ants_params["new_spacing"],
+                    "pixel_sizes": new_spacing,
                     "OMEZarr_params": self.args["OMEZarr_params"],
                 },
                 notes="Converting registered image to OMEZarr",
@@ -1160,8 +1033,12 @@ class Register(ArgSchemaParser):
         )
 
         # reverse transform annotation map
-        self.reverse_annotation_alignment(
-            img_array, ants_params, self.args["ng_params"]
+        ccf_annotation_in_image = self.invert_ccf_annotation_alignment(
+            ants_image, ants_params, self.args["ng_params"]
+        )
+        
+        ccf_image = self.invert_atlas_alignment(
+            ants_image, ants_params, "reference"
         )
 
         end_date_time = datetime.now()
@@ -1183,24 +1060,27 @@ class Register(ArgSchemaParser):
         )
 
         # registers segmented channels to CCF
-        for channel in self.args["additional_channels"]:
+        for this_channel in self.args["additional_channels"]:
             start_date_time = datetime.now()
 
             output_data_path = os.path.abspath(
-                f"../results/ccf_{channel}/OMEZarr"
+                f"../results/ccf_{this_channel}/OMEZarr"
             )
             create_folder(output_data_path)
 
+            
             image_path = Path(input_data_path).joinpath(
-                f"{channel}.zarr/{self.args['input_scale']}"
+                f"{this_channel}.zarr"
             )
 
             logger.info(f"Going to read zarr: {image_path}")
 
-            img_array = self.__read_zarr_image(image_path)
-
-            aligned_image = self.additional_channel_alignment(
-                img_array, ants_params
+            additional_ants_image = zarr_to_ants(image_path,
+                                      nd_metadata = tmp_metadata,
+                                      level = level)
+            
+            aligned_image = self.apply_transforms_to_additional_channels(
+                additional_ants_image, ants_params
             )
 
             end_date_time = datetime.now()
@@ -1217,11 +1097,12 @@ class Register(ArgSchemaParser):
                     code_url="https://github.com/ANTsX/ANTs",
                     code_version=ants.__version__,
                     parameters=ants_params,
-                    notes=f"Template based registration using transforms: {channel}",
+                    notes=f"Template based registration using transforms: {this_channel}",
                 )
             )
 
             start_date_time = datetime.now()
+            # Coonvert to LPS for dask storage
             aligned_image_dask = da.from_array(aligned_image)
 
             print(
@@ -1232,9 +1113,6 @@ class Register(ArgSchemaParser):
                 aligned_image.max(),
             )
 
-            aligned_image_dask = da.moveaxis(
-                aligned_image_dask, [0, 1, 2], [2, 1, 0]
-            )
             print(
                 "After changing orientation: ",
                 aligned_image_dask.shape,
@@ -1247,7 +1125,7 @@ class Register(ArgSchemaParser):
 
             self.write_zarr(
                 img_array=aligned_image_dask,  # dask array
-                physical_pixel_sizes=ants_params["new_spacing"],
+                physical_pixel_sizes=new_spacing,
                 output_path=output_data_path,
                 image_name=image_name,
                 opts=opts,
@@ -1269,10 +1147,10 @@ class Register(ArgSchemaParser):
                     code_url=self.args["code_url"],
                     code_version=__version__,
                     parameters={
-                        "pixel_sizes": ants_params["new_spacing"],
+                        "pixel_sizes": new_spacing,
                         "OMEZarr_params": self.args["OMEZarr_params"],
                     },
-                    notes=f"Converting registered image for channel {channel} to OMEZarr",
+                    notes=f"Converting registered image for channel {this_channel} to OMEZarr",
                 )
             )
 
@@ -1294,7 +1172,7 @@ def main(input_config: dict):
     """
     Main function to execute
     """
-    mod = Register(input_config)
+    mod = Register(input_config,args=[])
     return mod.run()
 
 

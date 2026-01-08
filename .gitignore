@@ -138,3 +138,4 @@ dmypy.json
 # MacOs
 **/.DS_Store
 /data/reference.tiff
+.vscode

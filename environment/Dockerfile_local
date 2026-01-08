@@ -13,7 +13,7 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 # Create env and install packages
-RUN conda create -n $CONDA_ENV python=3.8 -y && \
+RUN conda create -n $CONDA_ENV python=3.12.4 -y && \
     /opt/conda/envs/$CONDA_ENV/bin/pip install -U --no-cache-dir \
     antspyx==0.4.2 \
     argschema==3.0.4 \
@@ -26,6 +26,7 @@ RUN conda create -n $CONDA_ENV python=3.8 -y && \
     xarray_multiscale==1.1.0 \
     dask[distributed]==2022.11.1 \
     cloud-volume[all_codecs]==11.0.2 \
+    aind-registration-utils==0.4.2\
     matplotlib==3.7.3 \
     ome-zarr==0.8.2 \
     natsort==8.4.0 \
