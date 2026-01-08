@@ -346,9 +346,9 @@ class Register(ArgSchemaParser):
         # This should be more convergence steps than are needed,
         # The idea here being to ensure that the algorithm actually converges
         if self.args["reference_res"] == 25:
-            reg_iterations = [3000, 3000, 3000, 3000]
+            reg_iterations = [1,1,1,1]#[3000, 3000, 3000, 3000]
         elif self.args["reference_res"] == 10:
-            reg_iterations = [3000, 3000, 3000, 3000]
+            reg_iterations = [1,1,1,1]#[3000, 3000, 3000, 3000]
         else:
             raise ValueError(
                 f"Resolution {self.args['reference_res']} is not allowed. Allowed values are: 10, 25"
@@ -464,8 +464,6 @@ class Register(ArgSchemaParser):
         logger.info("Start registering brain image to template....")
         logger.info(f"{'=='*40}")
 
-        # ants_img = ants.image_read(self.args["prep_params"].get("percNorm_path")) #
-
         # register to SPIM template: rigid + affine + SyN
         aligned_image = self.register_to_template(ants_template, ants_img)
 
@@ -489,37 +487,38 @@ class Register(ArgSchemaParser):
         with open(f"{self.args['results_folder']}/ls_to_template_transform_information.json", "w") as f:
             f.write(dump_package(sidecar))
 
-        # ----------------------------------#
-        # Move CCF annotation to brain space
-        # ----------------------------------#
-        logger.info(f"{'=='*40}")
-        logger.info("Warping CCF annotation to brain space....")
-        logger.info(f"{'=='*40}")
+        # # ----------------------------------#
+        # # Move CCF annotation to brain space
+        # # ----------------------------------#
+        # logger.info(f"{'=='*40}")
+        # logger.info("Warping CCF annotation to brain space....")
+        # logger.info(f"{'=='*40}")
 
-        ccf_annotation = ants.image_read(self.args["ccf_annotation_path"],pixeltype='unsigned int')
+        # ccf_annotation = ants.image_read(self.args["ccf_annotation_path"],pixeltype='unsigned int')
+        # ccf_reference = ants.image_read(self.args["ccf_reference_path"])
 
-        template_to_brain_transform_path = [
-            f"{self.args['results_folder']}/ls_to_template_SyN_0GenericAffine.mat",
-            f"{self.args['results_folder']}/ls_to_template_SyN_1InverseWarp.nii.gz",
-        ]
+        # template_to_brain_transform_path = [
+        #     f"{self.args['results_folder']}/ls_to_template_SyN_0GenericAffine.mat",
+        #     f"{self.args['results_folder']}/ls_to_template_SyN_1InverseWarp.nii.gz",
+        # ]
 
-        # apply transform
-        aligned_image = ants.apply_transforms(
-            fixed=ants_img,
-            moving=ccf_annotation,
-            transformlist=template_to_brain_transform_path+ self.args["ccf_to_template_transform_path"],
-            whichtoinvert=[True, False,True, False],
-        )
+        # # apply transform
+        # aligned_image = ants.apply_transforms(
+        #     fixed=ants_img,
+        #     moving=ccf_annotation,
+        #     transformlist=template_to_brain_transform_path+ self.args["ccf_to_template_transform_path"],
+        #     whichtoinvert=[True, False,True, False],
+        # )
 
-        self._plot_write_antsimg(
-            aligned_image,
-            self.args["ants_params"]["ccf_anno_to_brain_path"],
-            vmin=0,
-            vmax=1200,
-        )
+        # self._plot_write_antsimg(
+        #     aligned_image,
+        #     self.args["ants_params"]["ccf_anno_to_brain_path"],
+        #     vmin=0,
+        #     vmax=1200,
+        # )
         
-        # Return a CCF-orientated numpy image. 
-        # Orientation matters for Zarr creation, since zarr images are not anatomically aware.
+        # # Return a CCF-orientated numpy image. 
+        # # Orientation matters for Zarr creation, since zarr images are not anatomically aware.
         aligned_image = aligned_image.reorient_image2(ants.get_orientation(ants_ccf))
         return aligned_image.numpy(), percentile_values
 
@@ -554,10 +553,7 @@ class Register(ArgSchemaParser):
         # load SPIM template + CCF
         # ----------------------------------#
 
-        logger.info("Reading reference images")
-        ants_template = ants.image_read(
-            os.path.abspath(self.args["template_path"])
-        )  # SPIM template
+        logger.info("Reading reference images (ccf)")
 
         if ccf_type == "reference":
             ants_ccf = ants.image_read(
@@ -574,12 +570,10 @@ class Register(ArgSchemaParser):
             raise ValueError(
                 f"{ccf_type} is not a known CCF type. Options are 'reference' or 'annotation'"
             )
-
-        logger.info(f"Loaded SPIM template {ants_template}")
         logger.info(f"Loaded CCF template {ants_ccf}")
 
         # ----------------------------------#
-        # register CCF to template space
+        # Move CCF to individual space
         # ----------------------------------#
         logger.info(f"{'=='*40}")
         logger.info("Start registering CCF to template space....")
@@ -591,20 +585,23 @@ class Register(ArgSchemaParser):
         ]
 
         # apply transform
-        aligned_image = ants.apply_transforms(
+        ccf_in_image = ants.apply_transforms(
             fixed=ants_img,
             moving=ants_ccf,
             transformlist=template_to_brain_transform_path+ self.args["ccf_to_template_transform_path"],
             whichtoinvert=[True, False,True, False],
+            interpolator = interpolator,
         )
 
-        aligned_image = aligned_image.reorient_image2(ants_ccf.orientation)
+        ccf_in_image = ccf_in_image.reorient_image2(ants_ccf.orientation)
+
         
-        aligned_image_array = aligned_image.numpy()
+        self._plot_write_antsimg(
+            ccf_in_image,
+            self.args["ants_params"]["ccf_to_brain_path"],
+        )
 
-        visual_spacing = tuple([s * 1000 for s in aligned_image.spacing])
-
-        return aligned_image_out, visual_spacing
+        return aligned_image_out
 
     def invert_ccf_annotation_alignment(
         self,
@@ -661,13 +658,19 @@ class Register(ArgSchemaParser):
             interpolator="genericLabel",
             whichtoinvert=[True, False, True, False],
         )
-        ants.image_write(aligned_image,'/results/ccf_annotation_in_mouse_test.nii.gz',)
 
         ## Edited to remove non-ants numpy image hacks!
         ## NEED TO CHECK THAT THE OUTPUT IS AS EXPECTED!!
         aligned_image = ants.reorient_image2(aligned_image,ants_annotation.orientation)
 
         aligned_image_array = aligned_image.numpy()
+
+        self._plot_write_antsimg(
+            aligned_image,
+            self.args["ants_params"]["ccf_anno_to_brain_path"],
+            vmin=0,
+            vmax=1200,
+        )
 
         visual_spacing = tuple(
             [s * 10**6 for s in aligned_image.spacing]
@@ -683,7 +686,7 @@ class Register(ArgSchemaParser):
         seg.build_precomputed_info()
         seg.create_segment_precomputed(aligned_image_array)
 
-        return
+        return aligned_image
 
     def apply_transforms_to_additional_channels(
         self,
@@ -1030,8 +1033,12 @@ class Register(ArgSchemaParser):
         )
 
         # reverse transform annotation map
-        self.invert_ccf_annotation_alignment(
+        ccf_annotation_in_image = self.invert_ccf_annotation_alignment(
             ants_image, ants_params, self.args["ng_params"]
+        )
+        
+        ccf_image = self.invert_atlas_alignment(
+            ants_image, ants_params, "reference"
         )
 
         end_date_time = datetime.now()

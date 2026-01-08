@@ -397,6 +397,7 @@ def main() -> None:
             "moved_to_template_path": f"{reg_folder}/moved_ls_to_template.nii.gz",
             "moved_to_ccf_path": f"{results_folder}/moved_ls_to_ccf.nii.gz",
             "ccf_anno_to_brain_path": f"{reg_folder}/moved_ccf_anno_to_ls.nii.gz",
+            "ccf_to_brain_path":f"{reg_folder}/moved_ccf_ls.nii.gz",
         },
         "OMEZarr_params": {
             "clevel": 1,

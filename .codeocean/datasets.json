@@ -6,6 +6,10 @@
 			"mount": "smartspim_lca_template"
 		},
 		{
+			"id": "5fe1babe-fd11-4093-a9e5-0626421ee936",
+			"mount": "SmartSPIM_786867_2025-11-12_21-33-06_stitched_2025-11-14_10-06-19"
+		},
+		{
 			"id": "79bf9032-5cff-4038-b2b8-8a24fa098e3b",
 			"mount": "allen_mouse_ccf"
 		},
