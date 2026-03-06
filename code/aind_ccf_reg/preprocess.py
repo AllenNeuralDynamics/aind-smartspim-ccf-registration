@@ -4,6 +4,7 @@ Preprocess lightsheet data
 
 import logging
 from datetime import datetime
+from typing import Optional
 
 import ants
 import numpy as np
@@ -54,7 +55,12 @@ def perc_normalization(
     ANTsImage
     """
     percentiles = [lower_perc, upper_perc]
-    percentile_values = np.percentile(ants_img.view(), percentiles)
+    # This is to account for spinal cord brains where
+    # the low intensity voxels can dominate the histogram
+    # and skew the percentile values.
+    arr = ants_img.view()
+    nonzero_vals = arr[arr > 0]
+    percentile_values = np.percentile(nonzero_vals, percentiles)
     assert percentile_values[1] > percentile_values[0]
 
     ants_img = np.maximum(ants_img, percentile_values[0])
@@ -114,11 +120,44 @@ class Masking:
 
         return largestCC
 
-    def _get_threshold_li(self, arr_img: np.ndarray) -> float:
-        """get the optimal threshold using Li thresholding"""
+    def _get_threshold_li(
+        self,
+        arr_img: np.ndarray,
+        low_intensity_threshold: Optional[int] = 50,
+        low_percentile_threshold: Optional[float] = 5.0,
+    ) -> float:
+        """
+        get the optimal threshold using Li thresholding
+
+        Parameters
+        ----------
+        arr_img: np.ndarray
+            image from which threshold will be computed.
+        low_intensity_threshold: int
+            low intensity threshold to filter out low
+            intensity pixels before computing the percentile threshold
+        low_percentile_threshold: float
+            low percentile threshold to use if Li thresholding returns 0
+        """
         start_time = datetime.now()
         low_thresh = threshold_li(arr_img)
         end_time = datetime.now()
+
+        if low_thresh == 0:
+            logger.warning(
+                "Li thresholding returned 0, which may indicate an issue with the image.\
+                Consider checking the image or using a different thresholding method."
+            )
+            # This accounts for spinal cord brains where the low intensity voxels
+            # can dominate the histogram and skew the Li thresholding result.
+            # In this case, we can use a percentile threshold to get a more reasonable
+            low_thresh = np.percentile(
+                arr_img[arr_img > low_intensity_threshold],
+                low_percentile_threshold,
+            )
+            logger.info(
+                f"Using low percentile threshold instead: {low_thresh}\n"
+            )
 
         logger.info(
             f"Find optimal threshold using Li thresholding, execution time:\
