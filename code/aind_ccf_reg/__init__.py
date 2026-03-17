@@ -21,7 +21,9 @@ __description__ = (
     "Repository for aligning brains captures with "
     "the SmartSPIM lightsheet microscope to the Allen CCF V3."
 )
-__url__ = "https://github.com/AllenNeuralDynamics/aind-smartspim-ccf-registration"
+__url__ = (
+    "https://github.com/AllenNeuralDynamics/aind-smartspim-ccf-registration"
+)
 
 __maintainers__ = [
     "Camilo Laiton",
