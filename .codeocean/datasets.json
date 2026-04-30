@@ -18,12 +18,24 @@
 			"mount": "lightsheet_template_ccf_registration"
 		},
 		{
+			"id": "afbb3be4-5287-4dd2-9056-5cea46c239a8",
+			"mount": "SmartSPIM_834198_2026-04-27_18-26-10_stitched_2026-04-29_09-29-10"
+		},
+		{
 			"id": "d5f9aaf7-a8c2-4f74-95de-13e86ae95ae9",
 			"mount": "spim_template_to_ccf"
 		},
 		{
+			"id": "dc661a16-ad44-47c2-871f-a27a2f4b0be0",
+			"mount": "SmartSPIM_805135_2025-07-16_16-49-00_stitched_2026-01-28_02-48-26"
+		},
+		{
 			"id": "ef57fdac-7980-482d-8700-069adff0ec0c",
 			"mount": "SmartSPIM_693196_2023-09-28_23-12-22_stitched_2024-01-11_10-23-15"
+		},
+		{
+			"id": "ff4cf809-5173-4238-bce6-69dcabaef6ce",
+			"mount": "SmartSPIM_841726_2026-03-20_13-59-16_stitched_2026-03-22_13-34-10"
 		}
 	]
 }

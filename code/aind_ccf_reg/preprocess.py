@@ -67,7 +67,7 @@ def perc_normalization(
 
 
 def write_and_plot_image(
-    ants_img, data_path=None, plot_path=None, vmin=VMIN, vmax=VMAX
+    ants_img, data_path=None, plot_path=None, vmin=None, vmax=None
 ):
     """
     Write and plot an ANTsImage
@@ -83,6 +83,11 @@ def write_and_plot_image(
     vmin, vmax: float
         Set the color limits of the antsImage.
     """
+    if (vmin ==None) or (vmax==None):
+        percentile_values = np.percentile(ants_img.view(), [2,98])
+        vmin = percentile_values[0]
+        vmax = percentile_values[1]
+
     if plot_path:
         title = plot_path.split("/")[-1].split(".")[0]
         plot_antsimgs(ants_img, plot_path, title, vmin=vmin, vmax=vmax)
@@ -209,8 +214,6 @@ class Preprocess:
             ants_img,
             data_path=self.args["prep_params"].get("resample_path"),
             plot_path=self.args["prep_params"].get("resample_figpath"),
-            vmin=0,
-            vmax=500,
         )
 
         return ants_img
@@ -239,6 +242,37 @@ class Preprocess:
 
         return ants_img_mask
 
+    def _resample_to_spacing(self, img, new_spacing, interp_type=0):
+        """
+        Resample ANTs image to a new spacing.
+
+        interp_type codes for ants.resample_image:
+            0 = linear
+            1 = nearest neighbor
+            2 = gaussian
+            3 = windowed sinc
+            4 = bspline
+        """
+        return ants.resample_image(
+            img,
+            resample_params=tuple(float(x) for x in new_spacing),
+            use_voxels=False,
+            interp_type=interp_type,
+        )
+
+
+    def _safe_divide_image(self,img, bias_field, eps=1e-8):
+        """
+        Divide img by bias_field with protection against zeros.
+        """
+        img_np = img.numpy().astype(np.float32)
+        bias_np = bias_field.numpy().astype(np.float32)
+        corrected_np = img_np / np.maximum(bias_np, eps)
+        out = ants.from_numpy(corrected_np)
+        out = ants.copy_image_info(img, out)
+        return out
+
+
     def compute_N4(
         self,
         ants_img,
@@ -250,54 +284,220 @@ class Preprocess:
         return_bias_field=False,
         verbose=False,
         weight_mask=None,
+        target_spacing=(0.1, 0.1, 0.1),
     ):
-        """N4 Bias Field Correction
-        https://antspy.readthedocs.io/en/latest/utils.html#ants.utils.bias_correction.n4_bias_field_correction
+        """
+        N4 Bias Field Correction, optionally computed on a downsampled image,
+        then the bias field is upsampled back to the original resolution.
+
+        Parameters
+        ----------
+        ants_img : ants.ANTsImage
+            Input image at native resolution.
+        mask : ants.ANTsImage or None
+            Optional mask.
+        rescale_intensities : bool
+            Passed to ants.n4_bias_field_correction.
+        shrink_factor : int
+            Passed to ants.n4_bias_field_correction.
+        convergence : dict
+            Passed to ants.n4_bias_field_correction.
+        spline_param : optional
+            Passed to ants.n4_bias_field_correction.
+        return_bias_field : bool
+            If True, also return the upsampled full-resolution bias field.
+        verbose : bool
+            Passed to ants.n4_bias_field_correction.
+        weight_mask : ants.ANTsImage or None
+            Optional weight mask.
+        target_spacing : tuple/list or None
+            Spacing to use for coarse N4 computation, in the same units as
+            ants_img.spacing. Example: (0.1, 0.1, 0.1).
+            If None, N4 is run directly at full resolution.
+
+        Returns
+        -------
+        ants_img_n4 : ants.ANTsImage
+            Bias-corrected image at original resolution.
+        upsampled_bias_field : ants.ANTsImage, optional
+            Returned only if return_bias_field=True.
         """
         logger.info("Computing N4")
-        n4_bias_params = {
-            "mask": mask,
-            "rescale_intensities": rescale_intensities,
-            "shrink_factor": shrink_factor,
-            "convergence": convergence,
-            "spline_param": spline_param,
-            "return_bias_field": return_bias_field,
-            "verbose": verbose,
-            "weight_mask": weight_mask,
-        }
 
-        logger.info(f"Parameters -> {n4_bias_params}")
-        start_time = datetime.now()
-        ants_img_n4 = ants.n4_bias_field_correction(
-            ants_img, **n4_bias_params
-        )
-        end_time = datetime.now()
+        # Decide whether to do low-res estimation
+        use_lowres = target_spacing is not None
 
-        logger.info(
-            f"N4 Complete, execution time: {end_time - start_time} s\
-            -- image {ants_img_n4}"
-        )
+        if use_lowres:
+            target_spacing = tuple(float(x) for x in target_spacing)
+            if len(target_spacing) != ants_img.dimension:
+                raise ValueError(
+                    f"target_spacing must have length {ants_img.dimension}, "
+                    f"got {len(target_spacing)}"
+                )
+
+            logger.info(f"Original spacing: {ants_img.spacing}")
+            logger.info(f"Target spacing:   {target_spacing}")
+
+            ants_img_n4_input = self._resample_to_spacing(
+                ants_img, target_spacing, interp_type=0
+            )
+            
+            ants.image_write(ants_img_n4_input,'/results/low_n4_test.nii.gz')
+
+            mask_n4 = None
+            if mask is not None:
+                mask_n4 = self._resample_to_spacing(
+                    mask, target_spacing, interp_type=1
+                )
+
+            weight_mask_n4 = None
+            if weight_mask is not None:
+                weight_mask_n4 = self._resample_to_spacing(
+                    weight_mask, target_spacing, interp_type=1
+                )
+
+            n4_bias_params = {
+                "mask": mask_n4,
+                "rescale_intensities": rescale_intensities,
+                "shrink_factor": shrink_factor,
+                "convergence": convergence,
+                "spline_param": spline_param,
+                "return_bias_field": True,
+                "verbose": verbose,
+                "weight_mask": weight_mask_n4,
+            }
+
+            logger.info(f"Parameters -> {n4_bias_params}")
+            start_time = datetime.now()
+            bias_field_lowres = ants.n4_bias_field_correction(
+                ants_img_n4_input, **n4_bias_params
+            )
+            end_time = datetime.now()
+            ants.image_write(bias_field_lowres,'/results/low_n4_field.nii.gz')
+
+            logger.info(
+                f"N4 complete at low resolution, execution time: {end_time - start_time}"
+            )
+
+            bias_field_fullres = ants.resample_image_to_target(
+                bias_field_lowres.clone("float"),
+                ants_img.clone("float"),
+                interp_type="linear",
+            )
+    
+            ants.image_write(bias_field_fullres,'/results/full_n4_field.nii.gz')
+            ants.image_write(ants_img,'/results/full_img.nii.gz')
+
+            ants_img_n4 = self._safe_divide_image(ants_img, bias_field_fullres)
+            ants.image_write(ants_img_n4,'/results/fullN4.nii.gz')
+
+        else:
+            n4_bias_params = {
+                "mask": mask,
+                "rescale_intensities": rescale_intensities,
+                "shrink_factor": shrink_factor,
+                "convergence": convergence,
+                "spline_param": spline_param,
+                "return_bias_field": return_bias_field,
+                "verbose": verbose,
+                "weight_mask": weight_mask,
+            }
+
+            logger.info(f"Parameters -> {n4_bias_params}")
+            start_time = datetime.now()
+            n4_out = ants.n4_bias_field_correction(ants_img, **n4_bias_params)
+            end_time = datetime.now()
+
+            logger.info(
+                f"N4 complete at full resolution, execution time: {end_time - start_time}"
+            )
+
+            if return_bias_field:
+                bias_field_fullres = n4_out
+                ants_img_n4 = self._safe_divide_image(ants_img, bias_field_fullres)
+            else:
+                ants_img_n4 = n4_out
+                bias_field_fullres = None
+
+        logger.info(f"N4 Complete -- image {ants_img_n4}")
 
         write_and_plot_image(
             ants_img_n4,
             data_path=self.args["prep_params"].get("n4bias_path"),
             plot_path=self.args["prep_params"].get("n4bias_figpath"),
-            vmin=0,
-            vmax=500,
         )
 
-        # Compute the difference between ants_img and ants_img_n4
         ants_img_intensity_difference = ants_img - ants_img_n4
 
         write_and_plot_image(
             ants_img_intensity_difference,
             data_path=self.args["prep_params"].get("img_diff_n4bias_path"),
             plot_path=self.args["prep_params"].get("img_diff_n4bias_figpath"),
-            vmin=0,
-            vmax=200,
         )
 
+        if return_bias_field:
+            return ants_img_n4, bias_field_fullres
         return ants_img_n4
+
+    # def compute_N4(
+    #     self,
+    #     ants_img,
+    #     mask=None,
+    #     rescale_intensities=False,
+    #     shrink_factor=4,
+    #     convergence={"iters": [50, 50, 50, 50], "tol": 1e-7},
+    #     spline_param=None,
+    #     return_bias_field=False,
+    #     verbose=False,
+    #     weight_mask=None,
+    # ):
+    #     """N4 Bias Field Correction
+    #     https://antspy.readthedocs.io/en/latest/utils.html#ants.utils.bias_correction.n4_bias_field_correction
+    #     """
+    #     logger.info("Computing N4")
+    #     n4_bias_params = {
+    #         "mask": mask,
+    #         "rescale_intensities": rescale_intensities,
+    #         "shrink_factor": shrink_factor,
+    #         "convergence": convergence,
+    #         "spline_param": spline_param,
+    #         "return_bias_field": return_bias_field,
+    #         "verbose": verbose,
+    #         "weight_mask": weight_mask,
+    #     }
+
+    #     logger.info(f"Parameters -> {n4_bias_params}")
+    #     start_time = datetime.now()
+    #     ants_img_n4 = ants.n4_bias_field_correction(
+    #         ants_img, **n4_bias_params
+    #     )
+    #     end_time = datetime.now()
+
+    #     logger.info(
+    #         f"N4 Complete, execution time: {end_time - start_time} s\
+    #         -- image {ants_img_n4}"
+    #     )
+
+    #     write_and_plot_image(
+    #         ants_img_n4,
+    #         data_path=self.args["prep_params"].get("n4bias_path"),
+    #         plot_path=self.args["prep_params"].get("n4bias_figpath"),
+    #         vmin=0,
+    #         vmax=500,
+    #     )
+
+    #     # Compute the difference between ants_img and ants_img_n4
+    #     ants_img_intensity_difference = ants_img - ants_img_n4
+
+    #     write_and_plot_image(
+    #         ants_img_intensity_difference,
+    #         data_path=self.args["prep_params"].get("img_diff_n4bias_path"),
+    #         plot_path=self.args["prep_params"].get("img_diff_n4bias_figpath"),
+    #         vmin=0,
+    #         vmax=200,
+    #     )
+
+    #     return ants_img_n4
 
     def intensity_norm(self, ants_img):
         """compute percential normalization"""
@@ -314,8 +514,6 @@ class Preprocess:
             ants_img,
             data_path=self.args["prep_params"].get("percNorm_path"),
             plot_path=self.args["prep_params"].get("percNorm_figpath"),
-            vmin=VMIN,
-            vmax=VMAX,
         )
 
         return ants_img, percentile_values
@@ -328,8 +526,8 @@ class Preprocess:
 
         ants_img = self.input_data # Removed resampling! 
         ants_img_mask = self.compute_mask(ants_img)
-        ants_img = ants_img * ants_img_mask
-        ants_img = self.compute_N4(ants_img, mask=ants_img_mask)
+        #ants_img = ants_img * ants_img_mask
+        ants_img = self.compute_N4(ants_img,mask=ants_img_mask)
         vmin, vmax = np.min(ants_img.view()), np.max(ants_img.view())
 
         logger.info(f"Min max values: {vmin} {vmax}")

@@ -269,7 +269,8 @@ class Register(ArgSchemaParser):
             "outprefix": f"{self.args['results_folder']}/ls_to_template_rigid_",
             "mask_all_stages": True,
             "grad_step": 0.25,
-            "reg_iterations": [60, 30, 15, 5],
+            "reg_iterations": [0, 0, 0, 0],
+            "aff_iterations": [60, 30, 15, 5],
             "aff_metric": "mattes",
             "verbose": True,  # Setting to true for future debugging
             "flow_sigma": 3.0,
@@ -279,6 +280,11 @@ class Register(ArgSchemaParser):
         logger.info(
             f"Computing rigid registration with parameters: {registration_params}"
         )
+        
+        ants.image_write(ants_fixed,'/results/ants_fixed.nii.gz')
+        ants.image_write(ants_moving,'/results/ants_moving.nii.gz')
+        #ants.image_write(moving_mask,'/results/moving_mask.nii.gz')
+
         rigid_reg = ants.registration(**registration_params)
         end_time = datetime.now()
         logger.info(
@@ -312,7 +318,7 @@ class Register(ArgSchemaParser):
             "outprefix": f"{self.args['results_folder']}/ls_to_template_affine_",
             "type_of_transform": "Affine",
             "reg_iterations": [0, 0, 0, 0],
-            "aff_iterations": [60, 30, 15, 5],
+            "aff_iterations": [1,1,1,1],#[60, 30, 15, 5],
             "aff_metric": "mattes",
             "verbose": True,
             "mask_all_stages": True,
@@ -346,9 +352,9 @@ class Register(ArgSchemaParser):
         # This should be more convergence steps than are needed,
         # The idea here being to ensure that the algorithm actually converges
         if self.args["reference_res"] == 25:
-            reg_iterations = [1,1,1,1]#[3000, 3000, 3000, 3000]
+            reg_iterations = [1,1,1,1]#[500, 100, 50, 0]
         elif self.args["reference_res"] == 10:
-            reg_iterations = [1,1,1,1]#[3000, 3000, 3000, 3000]
+            reg_iterations = [500, 100, 50, 0]
         else:
             raise ValueError(
                 f"Resolution {self.args['reference_res']} is not allowed. Allowed values are: 10, 25"
@@ -364,8 +370,8 @@ class Register(ArgSchemaParser):
                 f"{self.args['results_folder']}/ls_to_template_affine_0GenericAffine.mat"
             ],
             "mask_all_stages": True,
-            "syn_metric": "CC",
-            "syn_sampling": 2,
+            "syn_metric": "Mattes",
+            "syn_sampling": 32,
             "outprefix": f"{self.args['results_folder']}/ls_to_template_SyN_",
             "verbose": True,
         }
@@ -465,7 +471,8 @@ class Register(ArgSchemaParser):
         logger.info(f"{'=='*40}")
 
         # register to SPIM template: rigid + affine + SyN
-        aligned_image = self.register_to_template(ants_template, ants_img)
+        aligned_image = self.register_to_template(ants_template, 
+            ants_img,)
 
         # ----------------------------------#
         # Add "Sidecar" metadata
@@ -601,7 +608,7 @@ class Register(ArgSchemaParser):
             self.args["ants_params"]["ccf_to_brain_path"],
         )
 
-        return aligned_image_out
+        return ccf_in_image
 
     def invert_ccf_annotation_alignment(
         self,
