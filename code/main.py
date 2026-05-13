@@ -361,7 +361,9 @@ def main() -> None:
             )
 
     else:
-        logger.info(f"No registration channel, pipeline config: {pipeline_config}")
+        logger.info(
+            f"No registration channel, pipeline config: {pipeline_config}"
+        )
         results_folder = f"{results_path}"
         utils.save_dict_as_json(
             filename=f"{results_folder}/registration_processing_manifest_empty.json",

@@ -7,13 +7,11 @@ import unittest
 
 import ants
 import numpy as np
-from aind_ccf_reg.preprocess import Masking, perc_normalization, write_and_plot_image
+from aind_ccf_reg.preprocess import (Masking, perc_normalization,
+                                     write_and_plot_image)
 from aind_ccf_reg.register import pad_array_n_d
-from aind_ccf_reg.utils import (
-    create_folder,
-    read_json_as_dict,
-    save_dict_as_json,
-)
+from aind_ccf_reg.utils import (create_folder, read_json_as_dict,
+                                save_dict_as_json)
 
 
 class TestPreprocessing(unittest.TestCase):

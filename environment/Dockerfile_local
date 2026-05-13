@@ -42,7 +42,7 @@ FROM condaforge/miniforge3:latest
 LABEL maintainer="Camilo Laiton <camilo.laiton@alleninstitute.org>" \
     org.opencontainers.image.title="Image Atlas Registration" \
     org.opencontainers.image.description="Container for registration of lightsheet images to the Allen CCF V3 atlas" \
-    org.opencontainers.image.version="0.0.31" \
+    org.opencontainers.image.version="0.0.37" \
     org.opencontainers.image.licenses="MIT"
 
 ENV CONDA_ENV=ccf_reg
