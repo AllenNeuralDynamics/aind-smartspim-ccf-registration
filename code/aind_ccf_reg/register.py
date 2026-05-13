@@ -52,7 +52,7 @@ logger.setLevel(logging.INFO)
 
 def pad_array_n_d(arr: ArrayLike, dim: int = 5) -> ArrayLike:
     """
-    Pads a daks array to be in a 5D shape.
+    Pads a dask array to be in a 5D shape.
     Parameters
     ------------------------
     arr: ArrayLike

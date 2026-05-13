@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "aind_ccf_reg"
-description = "Prints messages to stdout. Simple boilerplate for libraries."
+description = "Registers SmartSPIM lightsheet datasets to the Allen Common Coordinate Framework (CCF) atlas using ANTs."
 license = {text = "MIT"}
 requires-python = ">=3.7"
 classifiers = [
@@ -79,7 +79,7 @@ exclude_lines = [
     "import",
     "pragma: no cover"
 ]
-fail_under = 0
+fail_under = 40
 
 [tool.isort]
 line_length = 79

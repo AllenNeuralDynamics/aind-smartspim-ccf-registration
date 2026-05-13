@@ -61,7 +61,12 @@ def perc_normalization(
     arr = ants_img.view()
     nonzero_vals = arr[arr > 0]
     percentile_values = np.percentile(nonzero_vals, percentiles)
-    assert percentile_values[1] > percentile_values[0]
+    if not percentile_values[1] > percentile_values[0]:
+        raise ValueError(
+            f"Upper percentile ({percentile_values[1]}) must be greater than "
+            f"lower percentile ({percentile_values[0]}). "
+            "The image may have insufficient non-zero voxels."
+        )
 
     ants_img = np.maximum(ants_img, percentile_values[0])
 
@@ -397,14 +402,3 @@ class Preprocess:
         return ants_img, percentile_values
 
 
-def main(input_config: dict):
-    """
-    Main function to execute
-    """
-
-    mod = Preprocess(input_config)
-    return mod.run()
-
-
-if __name__ == "__main__":
-    main()
