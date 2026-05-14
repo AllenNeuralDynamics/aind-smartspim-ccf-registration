@@ -8,6 +8,8 @@ Pipeline:
 (4) register CCF annotation to brain space
 """
 
+from __future__ import annotations
+
 import logging
 import multiprocessing
 import os

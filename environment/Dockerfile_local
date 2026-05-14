@@ -17,7 +17,6 @@ RUN conda create -n $CONDA_ENV python=3.8 -y && \
     /opt/conda/envs/$CONDA_ENV/bin/pip install -U --no-cache-dir --use-deprecated=legacy-resolver \
     antspyx==0.4.2 \
     argschema==3.0.4 \
-    s3fs==2022.11.0 \
     scikit-image==0.19.3 \
     tifffile==2022.10.10 \
     bokeh==2.4.2 \
@@ -30,7 +29,9 @@ RUN conda create -n $CONDA_ENV python=3.8 -y && \
     ome-zarr==0.8.2 \
     natsort==8.4.0 \
     crackle-codec==0.26.0 \
-    aicsimageio@git+https://github.com/camilolaiton/aicsimageio.git@feature/zarrwriter-multiscales-daskjobs && \
+    aicsimageio@git+https://github.com/camilolaiton/aicsimageio.git@feature/zarrwriter-multiscales-daskjobs \
+    s3fs \
+    boto3 && \
     conda clean --all --yes
 
 # ------------------- #

@@ -2,6 +2,8 @@
 File for utilities
 """
 
+from __future__ import annotations
+
 import json
 import logging
 import multiprocessing
@@ -218,7 +220,7 @@ def generate_processing(
         Terastitcher pipeline version
 
     """
-    # flake8: noqa: E501
+
     processing_pipeline = PipelineProcess(
         data_processes=data_processes,
         processor_full_name=processor_full_name,

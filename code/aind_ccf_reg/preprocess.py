@@ -289,10 +289,8 @@ class Preprocess:
         ants_img_mask = mask.run()
         end_time = datetime.now()
 
-        logger.info(
-            f"Mask Complete, execution time: {end_time - start_time} s\
-            -- image {ants_img_mask}"
-        )
+        logger.info(f"Mask Complete, execution time: {end_time - start_time} s\
+            -- image {ants_img_mask}")
 
         write_and_plot_image(
             ants_img_mask,
@@ -338,10 +336,8 @@ class Preprocess:
         )
         end_time = datetime.now()
 
-        logger.info(
-            f"N4 Complete, execution time: {end_time - start_time} s\
-            -- image {ants_img_n4}"
-        )
+        logger.info(f"N4 Complete, execution time: {end_time - start_time} s\
+            -- image {ants_img_n4}")
 
         write_and_plot_image(
             ants_img_n4,
@@ -370,10 +366,8 @@ class Preprocess:
         start_time = datetime.now()
         ants_img, percentile_values = perc_normalization(ants_img)
         end_time = datetime.now()
-        logger.info(
-            f"Intensity normalization complete, execution time:\
-            {end_time - start_time} s -- image {ants_img}"
-        )
+        logger.info(f"Intensity normalization complete, execution time:\
+            {end_time - start_time} s -- image {ants_img}")
 
         write_and_plot_image(
             ants_img,
@@ -402,9 +396,7 @@ class Preprocess:
         ants_img, percentile_values = self.intensity_norm(ants_img)
 
         end_date_time = datetime.now()
-        logger.info(
-            f"Preprocessing complete, execution time:\
-            {end_date_time - start_date_time} s"
-        )
+        logger.info(f"Preprocessing complete, execution time:\
+            {end_date_time - start_date_time} s")
 
         return ants_img, percentile_values
