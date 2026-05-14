@@ -2,6 +2,7 @@
 Main used in code ocean to execute capsule
 """
 
+import logging
 import math
 import multiprocessing
 import os
@@ -12,6 +13,8 @@ from aind_ccf_reg import register, utils
 from aind_ccf_reg.utils import create_folder, create_logger, read_json_as_dict
 from natsort import natsorted
 from ome_zarr.reader import Reader
+
+logger = logging.getLogger(__name__)
 
 
 def get_zarr_metadata(zarr_path):
@@ -304,8 +307,6 @@ def main() -> None:
                 "mask_path": f"{reg_folder}/prep_mask.nii.gz",
                 "n4bias_figpath": f"{reg_folder}/prep_n4bias.jpg",
                 "n4bias_path": f"{reg_folder}/prep_n4bias.nii.gz",
-                # "img_diff_n4bias_figpath": f"{reg_folder}/prep_img_diff_n4bias.jpg",
-                # "img_diff_n4bias_path": f"{reg_folder}/prep_img_diff_n4bias.nii.gz",
                 "percNorm_figpath": f"{reg_folder}/prep_percNorm.jpg",
                 "percNorm_path": f"{reg_folder}/prep_percNorm.nii.gz",
             },
@@ -360,7 +361,9 @@ def main() -> None:
             )
 
     else:
-        print(f"No registration channel, pipeline config: {pipeline_config}")
+        logger.info(
+            f"No registration channel, pipeline config: {pipeline_config}"
+        )
         results_folder = f"{results_path}"
         utils.save_dict_as_json(
             filename=f"{results_folder}/registration_processing_manifest_empty.json",

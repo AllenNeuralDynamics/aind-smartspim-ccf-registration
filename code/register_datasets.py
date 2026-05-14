@@ -70,7 +70,7 @@ def register_datasets(path_to_datasets: str):
 
     datasets = [
         dataset
-        for dataset in os.listdir(path)
+        for dataset in os.listdir(path_to_datasets)
         if os.path.isdir(f"{path_to_datasets}{dataset}")
     ]  # re.match(smartspim_processed_regex, dataset)
     n_datasets = len(datasets)

@@ -14,10 +14,9 @@ RUN apt-get update && \
 
 # Create env and install packages
 RUN conda create -n $CONDA_ENV python=3.8 -y && \
-    /opt/conda/envs/$CONDA_ENV/bin/pip install -U --no-cache-dir \
+    /opt/conda/envs/$CONDA_ENV/bin/pip install -U --no-cache-dir --use-deprecated=legacy-resolver \
     antspyx==0.4.2 \
     argschema==3.0.4 \
-    s3fs==2022.11.0 \
     scikit-image==0.19.3 \
     tifffile==2022.10.10 \
     bokeh==2.4.2 \
@@ -31,7 +30,8 @@ RUN conda create -n $CONDA_ENV python=3.8 -y && \
     natsort==8.4.0 \
     crackle-codec==0.26.0 \
     aicsimageio@git+https://github.com/camilolaiton/aicsimageio.git@feature/zarrwriter-multiscales-daskjobs \
-    awscli && \
+    s3fs \
+    boto3 && \
     conda clean --all --yes
 
 # ------------------- #
@@ -42,7 +42,7 @@ FROM condaforge/miniforge3:latest
 LABEL maintainer="Camilo Laiton <camilo.laiton@alleninstitute.org>" \
     org.opencontainers.image.title="Image Atlas Registration" \
     org.opencontainers.image.description="Container for registration of lightsheet images to the Allen CCF V3 atlas" \
-    org.opencontainers.image.version="0.0.31" \
+    org.opencontainers.image.version="0.0.37" \
     org.opencontainers.image.licenses="MIT"
 
 ENV CONDA_ENV=ccf_reg

@@ -2,6 +2,8 @@
 File for utilities
 """
 
+from __future__ import annotations
+
 import json
 import logging
 import multiprocessing
@@ -88,6 +90,21 @@ def read_json_as_dict(filepath: str) -> dict:
             dictionary = json.load(json_file)
 
     return dictionary
+
+
+def save_dict_as_json(filename: str, dictionary: dict) -> None:
+    """
+    Saves a dictionary as a JSON file.
+
+    Parameters
+    ------------------------
+    filename: str
+        Path where the JSON file will be written.
+    dictionary: dict
+        Dictionary to serialize.
+    """
+    with open(filename, "w") as json_file:
+        json.dump(dictionary, json_file, indent=2)
 
 
 def create_folder(dest_dir: PathLike, verbose: Optional[bool] = False) -> None:
@@ -203,7 +220,7 @@ def generate_processing(
         Terastitcher pipeline version
 
     """
-    # flake8: noqa: E501
+
     processing_pipeline = PipelineProcess(
         data_processes=data_processes,
         processor_full_name=processor_full_name,

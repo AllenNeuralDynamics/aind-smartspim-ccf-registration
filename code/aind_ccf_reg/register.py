@@ -8,6 +8,8 @@ Pipeline:
 (4) register CCF annotation to brain space
 """
 
+from __future__ import annotations
+
 import logging
 import multiprocessing
 import os
@@ -52,7 +54,7 @@ logger.setLevel(logging.INFO)
 
 def pad_array_n_d(arr: ArrayLike, dim: int = 5) -> ArrayLike:
     """
-    Pads a daks array to be in a 5D shape.
+    Pads a dask array to be in a 5D shape.
     Parameters
     ------------------------
     arr: ArrayLike

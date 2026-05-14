@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "aind_ccf_reg"
-description = "Prints messages to stdout. Simple boilerplate for libraries."
+description = "Registers SmartSPIM lightsheet datasets to the Allen Common Coordinate Framework (CCF) atlas using ANTs."
 license = {text = "MIT"}
 requires-python = ">=3.7"
 classifiers = [
@@ -20,7 +20,7 @@ dependencies = [
   'tifffile==2022.10.10',
   'bokeh==2.4.2',
   'zarr==2.13.3',
-  'aind-data-schema==0.22.1',
+  'aind-data-schema==1.0.0',
   'xarray_multiscale==1.1.0',
   'dask[distributed]==2022.11.1',
   'matplotlib==3.7.3',
@@ -79,7 +79,7 @@ exclude_lines = [
     "import",
     "pragma: no cover"
 ]
-fail_under = 0
+fail_under = 40
 
 [tool.isort]
 line_length = 79
