@@ -1,5 +1,5 @@
 metadata_version: 1
-name: aind-smartspim-ccf-registration-0.0.37
+name: aind-smartspim-ccf-registration-0.0.37-new-image
 description: A tool for automated registration of lightsheet image volumes to the
   Allen V3 CCF template
 tags:
