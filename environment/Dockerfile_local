@@ -30,6 +30,7 @@ RUN conda create -n $CONDA_ENV python=3.8 -y && \
     natsort==8.4.0 \
     crackle-codec==0.26.0 \
     aicsimageio@git+https://github.com/camilolaiton/aicsimageio.git@feature/zarrwriter-multiscales-daskjobs \
+    compresso \
     s3fs \
     boto3 && \
     conda clean --all --yes
