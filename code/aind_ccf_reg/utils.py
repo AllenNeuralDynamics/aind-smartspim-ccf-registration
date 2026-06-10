@@ -26,45 +26,6 @@ from aind_data_schema.core.processing import (DataProcess, PipelineProcess,
 from cloudvolume import CloudVolume
 
 
-def create_logger(output_log_path: PathLike) -> logging.Logger:
-    """
-    Creates a logger that generates output logs to a specific path.
-
-    Parameters
-    ------------
-    output_log_path: PathLike
-        Path where the log is going to be stored
-
-    Returns
-    -----------
-    logging.Logger
-        Created logger
-        pointing to the file path.
-    """
-    CURR_DATE_TIME = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
-
-    LOGS_FILE = f"{output_log_path}/register_process.log"
-
-    logging.basicConfig(
-        level=logging.DEBUG,
-        format="%(asctime)s - %(levelname)s : %(message)s",
-        datefmt="%Y-%m-%d %H:%M",
-        handlers=[
-            logging.StreamHandler(),
-            logging.FileHandler(LOGS_FILE, "a"),
-        ],
-        force=True,
-    )
-
-    #     logging.disable("DEBUG")
-    logging.disable(logging.DEBUG)
-    logger = logging.getLogger(__name__)
-    logger.setLevel(logging.DEBUG)
-    logger.info(f"Execution datetime: {CURR_DATE_TIME}")
-
-    return logger
-
-
 def read_json_as_dict(filepath: str) -> dict:
     """
     Reads a json as dictionary.

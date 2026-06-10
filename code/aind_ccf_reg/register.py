@@ -44,13 +44,7 @@ from aind_ccf_reg.utils import (check_orientation, create_folder,
                                 create_precomputed, generate_processing,
                                 rotate_image)
 
-LOG_FMT = "%(asctime)s %(message)s"
-LOG_DATE_FMT = "%Y-%m-%d %H:%M"
-
-logging.basicConfig(format=LOG_FMT, datefmt=LOG_DATE_FMT)
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
-
 
 def pad_array_n_d(arr: ArrayLike, dim: int = 5) -> ArrayLike:
     """
@@ -1111,25 +1105,14 @@ class Register(ArgSchemaParser):
         }
 
         aligned_image_dask = da.from_array(no_norm_aligned_image)
-        print(
-            "Before changing orientation: ",
-            aligned_image_dask.shape,
-            " DR: ",
-            no_norm_aligned_image.min(),
-            no_norm_aligned_image.max(),
-        )
+        logger.debug(f"Aligned image shape: {aligned_image_dask.shape}")
+        logger.debug(f"Aligned image dtype: {aligned_image_dask.dtype}")
+        logger.debug(f"Dynamic range of unaligned image: {no_norm_aligned_image.min()} - {no_norm_aligned_image.max()}")
+
         aligned_image_dask = da.moveaxis(
             aligned_image_dask, [0, 1, 2], [2, 1, 0]
         )
-        print(
-            "After changing orientation: ",
-            aligned_image_dask.shape,
-            " DR: ",
-            no_norm_aligned_image.min(),
-            no_norm_aligned_image.max(),
-            aligned_image_dask.dtype,
-            no_norm_aligned_image.dtype,
-        )
+        logger.debug(f"After moveaxis, aligned image shape: {aligned_image_dask.shape}")
 
         self.write_zarr(
             img_array=aligned_image_dask,  # dask array
@@ -1226,25 +1209,8 @@ class Register(ArgSchemaParser):
             start_date_time = datetime.now()
             aligned_image_dask = da.from_array(aligned_image)
 
-            print(
-                "Before changing orientation: ",
-                aligned_image_dask.shape,
-                " DR: ",
-                aligned_image.min(),
-                aligned_image.max(),
-            )
-
             aligned_image_dask = da.moveaxis(
                 aligned_image_dask, [0, 1, 2], [2, 1, 0]
-            )
-            print(
-                "After changing orientation: ",
-                aligned_image_dask.shape,
-                " DR: ",
-                aligned_image.min(),
-                aligned_image.max(),
-                aligned_image_dask.dtype,
-                aligned_image.dtype,
             )
 
             self.write_zarr(
