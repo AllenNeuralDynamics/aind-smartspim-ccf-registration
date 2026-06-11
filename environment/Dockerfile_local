@@ -13,7 +13,7 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 # Create env and install packages
-RUN conda create -n $CONDA_ENV python=3.8 -y && \
+RUN conda create -n $CONDA_ENV python=3.9 -y && \
     /opt/conda/envs/$CONDA_ENV/bin/pip install -U --no-cache-dir --use-deprecated=legacy-resolver \
     antspyx==0.4.2 \
     argschema==3.0.4 \
@@ -32,7 +32,8 @@ RUN conda create -n $CONDA_ENV python=3.8 -y && \
     aicsimageio@git+https://github.com/camilolaiton/aicsimageio.git@feature/zarrwriter-multiscales-daskjobs \
     compresso \
     s3fs \
-    boto3 && \
+    boto3 \
+    log-schema==0.2.10.dev1 &&
     conda clean --all --yes
 
 # ------------------- #
