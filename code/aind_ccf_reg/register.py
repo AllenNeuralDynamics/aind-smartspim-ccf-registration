@@ -13,7 +13,7 @@ from __future__ import annotations
 import logging
 import multiprocessing
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Hashable, List, Sequence, Tuple, Union
 
@@ -25,13 +25,25 @@ import xarray_multiscale
 import zarr
 from aicsimageio.types import PhysicalPixelSizes
 from aicsimageio.writers import OmeZarrWriter
-from aind_data_schema.core.processing import DataProcess, ProcessName
+from aind_data_schema.components.identifiers import Code
+from aind_data_schema.core.processing import (
+    DataProcess,
+    ProcessName,
+    ProcessStage,
+)
 from argschema import ArgSchemaParser
 from dask.distributed import Client, LocalCluster, performance_report
 from distributed import wait
 from numcodecs import blosc
 
-from .__init__ import __version__
+from .__init__ import (
+    __maintainers__,
+    __pipeline_name__,
+    __pipeline_version__,
+    __title__,
+    __url__,
+    __version__,
+)
 from .utils import get_cpu_limit
 
 blosc.use_threads = False
@@ -40,9 +52,9 @@ from aind_ccf_reg.configs import VMAX, VMIN, ArrayLike, PathLike, RegSchema
 from aind_ccf_reg.plots import plot_antsimgs, plot_reg
 from aind_ccf_reg.preprocess import (Preprocess, invert_perc_normalization,
                                      perc_normalization, write_and_plot_image)
-from aind_ccf_reg.utils import (check_orientation, create_folder,
-                                create_precomputed, generate_processing,
-                                rotate_image)
+from aind_ccf_reg.utils import (ResourceMonitor, check_orientation,
+                                create_folder, create_precomputed,
+                                generate_processing, rotate_image)
 
 logger = logging.getLogger(__name__)
 
@@ -1039,28 +1051,42 @@ class Register(ArgSchemaParser):
                 f"{selected_channel}/{self.args['input_scale']}"
             )
 
-        start_date_time = datetime.now()
+        reg_channel = self.args["input_channel"]
+        cpu_cores = int(get_cpu_limit())
+
+        start_date_time = datetime.now(timezone.utc)
+        resource_monitor = ResourceMonitor(interval_seconds=1.0).start()
         img_array = self.__read_zarr_image(image_path)
-        end_date_time = datetime.now()
+        resource_monitor.stop()
+        end_date_time = datetime.now(timezone.utc)
 
         data_processes.append(
             DataProcess(
-                name=ProcessName.IMAGE_IMPORTING,
-                software_version=__version__,
+                process_type=ProcessName.IMAGE_IMPORTING,
+                name=f"Image importing - {reg_channel}",
+                stage=ProcessStage.PROCESSING,
+                code=Code(
+                    url=__url__, name=__title__, version=__version__
+                ),
+                experimenters=__maintainers__,
+                pipeline_name=__pipeline_name__,
                 start_date_time=start_date_time,
                 end_date_time=end_date_time,
-                input_location=str(image_path),
-                output_location=str(image_path),
-                outputs={},
-                code_url=self.args["code_url"],
-                code_version=__version__,
-                parameters={},
+                output_path=str(image_path),
+                output_parameters={
+                    "input_location": str(image_path),
+                    "duration_seconds": (
+                        end_date_time - start_date_time
+                    ).total_seconds(),
+                },
+                resources=resource_monitor.to_resource_usage(
+                    cpu_cores=cpu_cores
+                ),
                 notes="Importing fused data for alignment",
             )
         )
 
         # Atlas alignment
-        start_date_time = datetime.now()
         ants_params = self.args["ants_params"]
         ants_params["new_spacing"] = (
             self.args["reference_res"],
@@ -1068,32 +1094,48 @@ class Register(ArgSchemaParser):
             self.args["reference_res"],
         )
 
+        start_date_time = datetime.now(timezone.utc)
+        resource_monitor = ResourceMonitor(interval_seconds=1.0).start()
         aligned_image, percentile_values = self.atlas_alignment(
             img_array, ants_params
         )
         no_norm_aligned_image = invert_perc_normalization(
             aligned_image, percentile_values
         )
-
-        end_date_time = datetime.now()
+        resource_monitor.stop()
+        end_date_time = datetime.now(timezone.utc)
 
         data_processes.append(
             DataProcess(
-                name=ProcessName.IMAGE_ATLAS_ALIGNMENT,
-                software_version=__version__,
+                process_type=ProcessName.IMAGE_ATLAS_ALIGNMENT,
+                name=f"Atlas alignment (LS -> template -> CCF) - {reg_channel}",
+                stage=ProcessStage.PROCESSING,
+                code=Code(
+                    url="https://github.com/ANTsX/ANTs",
+                    name="ANTs",
+                    version=ants.__version__,
+                ),
+                experimenters=__maintainers__,
+                pipeline_name=__pipeline_name__,
                 start_date_time=start_date_time,
                 end_date_time=end_date_time,
-                input_location=str(image_path),
-                output_location=str(reg_folder),
-                outputs={},
-                code_url="https://github.com/ANTsX/ANTs",
-                code_version=ants.__version__,
-                parameters=ants_params,
+                output_path=str(reg_folder),
+                output_parameters={
+                    "input_location": str(image_path),
+                    "parameters": ants_params,
+                    "duration_seconds": (
+                        end_date_time - start_date_time
+                    ).total_seconds(),
+                },
+                resources=resource_monitor.to_resource_usage(
+                    cpu_cores=cpu_cores
+                ),
                 notes="Template based registration: LS -> template -> Allen CCFv3 Atlas",
             )
         )
 
-        start_date_time = datetime.now()
+        start_date_time = datetime.now(timezone.utc)
+        resource_monitor = ResourceMonitor(interval_seconds=1.0).start()
         image_name = "image.zarr"
 
         opts = {
@@ -1121,56 +1163,81 @@ class Register(ArgSchemaParser):
             image_name=image_name,
             opts=opts,
         )
-        end_date_time = datetime.now()
+        resource_monitor.stop()
+        end_date_time = datetime.now(timezone.utc)
 
         data_processes.append(
             DataProcess(
-                name=ProcessName.FILE_FORMAT_CONVERSION,
-                software_version=__version__,
+                process_type=ProcessName.FILE_FORMAT_CONVERSION,
+                name=f"OMEZarr conversion - {reg_channel}",
+                stage=ProcessStage.PROCESSING,
+                code=Code(
+                    url=__url__, name=__title__, version=__version__
+                ),
+                experimenters=__maintainers__,
+                pipeline_name=__pipeline_name__,
                 start_date_time=start_date_time,
                 end_date_time=end_date_time,
-                input_location="In memory array",
-                output_location=str(
+                output_path=str(
                     Path(output_data_path).joinpath(image_name)
                 ),
-                outputs={},
-                code_url=self.args["code_url"],
-                code_version=__version__,
-                parameters={
-                    "pixel_sizes": ants_params["new_spacing"],
-                    "OMEZarr_params": self.args["OMEZarr_params"],
+                output_parameters={
+                    "input_location": "In memory array",
+                    "parameters": {
+                        "pixel_sizes": ants_params["new_spacing"],
+                        "OMEZarr_params": self.args["OMEZarr_params"],
+                    },
+                    "duration_seconds": (
+                        end_date_time - start_date_time
+                    ).total_seconds(),
                 },
+                resources=resource_monitor.to_resource_usage(
+                    cpu_cores=cpu_cores
+                ),
                 notes="Converting registered image to OMEZarr",
             )
         )
 
         # reverse transform annotation map
+        start_date_time = datetime.now(timezone.utc)
+        resource_monitor = ResourceMonitor(interval_seconds=1.0).start()
         self.reverse_annotation_alignment(
             img_array, ants_params, self.args["ng_params"]
         )
-
-        end_date_time = datetime.now()
+        resource_monitor.stop()
+        end_date_time = datetime.now(timezone.utc)
 
         data_processes.append(
             DataProcess(
-                name=ProcessName.IMAGE_ATLAS_ALIGNMENT,
-                software_version=__version__,
+                process_type=ProcessName.IMAGE_ATLAS_ALIGNMENT,
+                name=f"Reverse annotation alignment (CCF -> LS) - {reg_channel}",
+                stage=ProcessStage.PROCESSING,
+                code=Code(
+                    url="https://github.com/ANTsX/ANTs",
+                    name="ANTs",
+                    version=ants.__version__,
+                ),
+                experimenters=__maintainers__,
+                pipeline_name=__pipeline_name__,
                 start_date_time=start_date_time,
                 end_date_time=end_date_time,
-                input_location=str(image_path),
-                output_location="In memory array",
-                outputs={},
-                code_url="https://github.com/ANTsX/ANTs",
-                code_version=ants.__version__,
-                parameters=ants_params,
+                output_path=str(image_path),
+                output_parameters={
+                    "input_location": str(image_path),
+                    "parameters": ants_params,
+                    "duration_seconds": (
+                        end_date_time - start_date_time
+                    ).total_seconds(),
+                },
+                resources=resource_monitor.to_resource_usage(
+                    cpu_cores=cpu_cores
+                ),
                 notes="Template based reversed registration: annotations in template space -> LS",
             )
         )
 
         # registers segmented channels to CCF
         for channel in self.args["additional_channels"]:
-            start_date_time = datetime.now()
-
             output_data_path = os.path.abspath(
                 f"../results/ccf_{channel}/OMEZarr"
             )
@@ -1182,31 +1249,47 @@ class Register(ArgSchemaParser):
 
             logger.info(f"Going to read zarr: {image_path}")
 
+            start_date_time = datetime.now(timezone.utc)
+            resource_monitor = ResourceMonitor(interval_seconds=1.0).start()
             img_array = self.__read_zarr_image(image_path)
 
             aligned_image = self.additional_channel_alignment(
                 img_array, ants_params
             )
-
-            end_date_time = datetime.now()
+            resource_monitor.stop()
+            end_date_time = datetime.now(timezone.utc)
 
             data_processes.append(
                 DataProcess(
-                    name=ProcessName.IMAGE_ATLAS_ALIGNMENT,
-                    software_version=__version__,
+                    process_type=ProcessName.IMAGE_ATLAS_ALIGNMENT,
+                    name=f"Atlas alignment using transforms - {channel}",
+                    stage=ProcessStage.PROCESSING,
+                    code=Code(
+                        url="https://github.com/ANTsX/ANTs",
+                        name="ANTs",
+                        version=ants.__version__,
+                    ),
+                    experimenters=__maintainers__,
+                    pipeline_name=__pipeline_name__,
                     start_date_time=start_date_time,
                     end_date_time=end_date_time,
-                    input_location=str(image_path),
-                    output_location="In memory array",
-                    outputs={},
-                    code_url="https://github.com/ANTsX/ANTs",
-                    code_version=ants.__version__,
-                    parameters=ants_params,
+                    output_path=str(image_path),
+                    output_parameters={
+                        "input_location": str(image_path),
+                        "parameters": ants_params,
+                        "duration_seconds": (
+                            end_date_time - start_date_time
+                        ).total_seconds(),
+                    },
+                    resources=resource_monitor.to_resource_usage(
+                        cpu_cores=cpu_cores
+                    ),
                     notes=f"Template based registration using transforms: {channel}",
                 )
             )
 
-            start_date_time = datetime.now()
+            start_date_time = datetime.now(timezone.utc)
+            resource_monitor = ResourceMonitor(interval_seconds=1.0).start()
             aligned_image_dask = da.from_array(aligned_image)
 
             aligned_image_dask = da.moveaxis(
@@ -1220,26 +1303,37 @@ class Register(ArgSchemaParser):
                 image_name=image_name,
                 opts=opts,
             )
-
-            end_date_time = datetime.now()
+            resource_monitor.stop()
+            end_date_time = datetime.now(timezone.utc)
 
             data_processes.append(
                 DataProcess(
-                    name=ProcessName.FILE_FORMAT_CONVERSION,
-                    software_version=__version__,
+                    process_type=ProcessName.FILE_FORMAT_CONVERSION,
+                    name=f"OMEZarr conversion - {channel}",
+                    stage=ProcessStage.PROCESSING,
+                    code=Code(
+                        url=__url__, name=__title__, version=__version__
+                    ),
+                    experimenters=__maintainers__,
+                    pipeline_name=__pipeline_name__,
                     start_date_time=start_date_time,
                     end_date_time=end_date_time,
-                    input_location="In memory array",
-                    output_location=str(
+                    output_path=str(
                         Path(output_data_path).joinpath(image_name)
                     ),
-                    outputs={},
-                    code_url=self.args["code_url"],
-                    code_version=__version__,
-                    parameters={
-                        "pixel_sizes": ants_params["new_spacing"],
-                        "OMEZarr_params": self.args["OMEZarr_params"],
+                    output_parameters={
+                        "input_location": "In memory array",
+                        "parameters": {
+                            "pixel_sizes": ants_params["new_spacing"],
+                            "OMEZarr_params": self.args["OMEZarr_params"],
+                        },
+                        "duration_seconds": (
+                            end_date_time - start_date_time
+                        ).total_seconds(),
                     },
+                    resources=resource_monitor.to_resource_usage(
+                        cpu_cores=cpu_cores
+                    ),
                     notes=f"Converting registered image for channel {channel} to OMEZarr",
                 )
             )
@@ -1250,9 +1344,10 @@ class Register(ArgSchemaParser):
 
         generate_processing(
             data_processes=data_processes,
-            dest_processing=metadata_path,
-            processor_full_name="Di Wang, Camilo Laiton",
-            pipeline_version="1.6.0",
+            dest_processing=str(metadata_path),
+            pipeline_name=__pipeline_name__,
+            pipeline_version=__pipeline_version__,
+            pipeline_url=__url__,
         )
 
         return str(image_path)
