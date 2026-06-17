@@ -30,6 +30,7 @@ RUN for i in 1 2 3 4 5; do \
 
 # Install Python packages
 RUN /opt/conda/envs/$CONDA_ENV/bin/pip install -U --no-cache-dir --use-deprecated=legacy-resolver \
+    numpy==1.26.4 \
     antspyx==0.6.3 \
     argschema==3.0.4 \
     scikit-image==0.24.0 \
