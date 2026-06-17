@@ -18,13 +18,12 @@ from pathlib import Path
 from typing import Dict, Hashable, List, Sequence, Tuple, Union
 
 import ants
+from .zarr_writer.zarr_writer import zarr_writer
 import dask
 import dask.array as da
 import numpy as np
 import xarray_multiscale
 import zarr
-from aicsimageio.types import PhysicalPixelSizes
-from aicsimageio.writers import OmeZarrWriter
 from aind_data_schema.components.identifiers import Code
 from aind_data_schema.core.processing import (
     DataProcess,
@@ -32,8 +31,6 @@ from aind_data_schema.core.processing import (
     ProcessStage,
 )
 from argschema import ArgSchemaParser
-from dask.distributed import Client, LocalCluster, performance_report
-from distributed import wait
 from numcodecs import blosc
 
 from .__init__ import (
@@ -922,86 +919,28 @@ class Register(ArgSchemaParser):
             options for the zarr image
         """
 
-        dask_folder = Path("../scratch")
-        # Setting dask configuration
-        dask.config.set(
-            {
-                "temporary-directory": dask_folder,
-                "local_directory": dask_folder,
-                "tcp-timeout": "300s",
-                "array.chunk-size": "384MiB",
-                "distributed.comm.timeouts": {
-                    "connect": "300s",
-                    "tcp": "300s",
-                },
-                "distributed.scheduler.bandwidth": 100000000,
-                "distributed.worker.memory.rebalance.measure": "optimistic",
-                "distributed.worker.memory.target": False,
-                "distributed.worker.memory.spill": 0.92,
-                "distributed.worker.memory.pause": 0.95,
-                "distributed.worker.memory.terminate": 0.98,
-            }
+        # Padding to 5D if necessary
+        img_array = pad_array_n_d(img_array)
+
+        # If dask array, perform compute before writing
+        if isinstance(img_array, da.core.Array):
+            img_array = img_array.compute()
+
+        zarr_writer(
+            image_data=img_array,
+            output_path=output_path,
+            voxel_size=physical_pixel_sizes,
+            shard_size=(512, 512, 512),
+            chunk_size=(128, 128, 128),
+            scale_factor=[2, 2, 2],
+            n_lvls=self.args["OMEZarr_params"]["n_lvls"],
+            channel_name=self.args["input_channel"],
+            logger=logger,
+            stack_name=image_name,
+            compressor_kwargs=opts,
+            downsample_mode="mean",
+            bucket_name=None,
         )
-
-        physical_pixels = PhysicalPixelSizes(
-            physical_pixel_sizes[0],
-            physical_pixel_sizes[1],
-            physical_pixel_sizes[2],
-        )
-
-        scale_axis = [2, 2, 2]
-        pyramid_data = compute_pyramid(
-            img_array,
-            -1,
-            scale_axis,
-            self.args["OMEZarr_params"]["chunks"],
-        )
-
-        pyramid_data = [pad_array_n_d(pyramid) for pyramid in pyramid_data]
-        logger.info(f"Pyramid {pyramid_data}")
-
-        # Writing OMEZarr image
-
-        # Pulling number of available workers in Code Ocean or SLURM
-        n_workers = int(get_cpu_limit())
-
-        threads_per_worker = 1
-        # Using 1 thread since is in single machine.
-        # Avoiding the use of multithreaded due to GIL
-
-        cluster = LocalCluster(
-            n_workers=n_workers,
-            threads_per_worker=threads_per_worker,
-            processes=True,
-            memory_limit="auto",
-        )
-        client = Client(cluster)
-
-        writer = OmeZarrWriter(output_path)
-
-        dask_report_file = Path(self.args["metadata_folder"]).joinpath(
-            "dask_report.html"
-        )
-
-        with performance_report(filename=dask_report_file):
-            dask_jobs = writer.write_multiscale(
-                pyramid=pyramid_data,
-                image_name=image_name,
-                chunks=pyramid_data[0].chunksize,
-                physical_pixel_sizes=physical_pixels,
-                channel_names=None,
-                channel_colors=None,
-                scale_factor=scale_axis,
-                storage_options=opts,
-                compute_dask=False,
-                **get_pyramid_metadata(),
-            )
-
-            if len(dask_jobs):
-                dask_jobs = dask.persist(*dask_jobs)
-                wait(dask_jobs)
-
-        client.shutdown()
 
     def run(self) -> str:
         """
@@ -1055,7 +994,7 @@ class Register(ArgSchemaParser):
         cpu_cores = int(get_cpu_limit())
 
         start_date_time = datetime.now(timezone.utc)
-        resource_monitor = ResourceMonitor(interval_seconds=1.0).start()
+        resource_monitor = ResourceMonitor(interval_seconds=30.0).start()
         img_array = self.__read_zarr_image(image_path)
         resource_monitor.stop()
         end_date_time = datetime.now(timezone.utc)
@@ -1095,7 +1034,7 @@ class Register(ArgSchemaParser):
         )
 
         start_date_time = datetime.now(timezone.utc)
-        resource_monitor = ResourceMonitor(interval_seconds=1.0).start()
+        resource_monitor = ResourceMonitor(interval_seconds=30.0).start()
         aligned_image, percentile_values = self.atlas_alignment(
             img_array, ants_params
         )
@@ -1135,7 +1074,7 @@ class Register(ArgSchemaParser):
         )
 
         start_date_time = datetime.now(timezone.utc)
-        resource_monitor = ResourceMonitor(interval_seconds=1.0).start()
+        resource_monitor = ResourceMonitor(interval_seconds=30.0).start()
         image_name = "image.zarr"
 
         opts = {
@@ -1200,7 +1139,7 @@ class Register(ArgSchemaParser):
 
         # reverse transform annotation map
         start_date_time = datetime.now(timezone.utc)
-        resource_monitor = ResourceMonitor(interval_seconds=1.0).start()
+        resource_monitor = ResourceMonitor(interval_seconds=30.0).start()
         self.reverse_annotation_alignment(
             img_array, ants_params, self.args["ng_params"]
         )
@@ -1250,7 +1189,7 @@ class Register(ArgSchemaParser):
             logger.info(f"Going to read zarr: {image_path}")
 
             start_date_time = datetime.now(timezone.utc)
-            resource_monitor = ResourceMonitor(interval_seconds=1.0).start()
+            resource_monitor = ResourceMonitor(interval_seconds=30.0).start()
             img_array = self.__read_zarr_image(image_path)
 
             aligned_image = self.additional_channel_alignment(
@@ -1289,7 +1228,7 @@ class Register(ArgSchemaParser):
             )
 
             start_date_time = datetime.now(timezone.utc)
-            resource_monitor = ResourceMonitor(interval_seconds=1.0).start()
+            resource_monitor = ResourceMonitor(interval_seconds=30.0).start()
             aligned_image_dask = da.from_array(aligned_image)
 
             aligned_image_dask = da.moveaxis(

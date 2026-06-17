@@ -27,8 +27,7 @@ dependencies = [
   'dask[distributed]==2026.6.0',
   'matplotlib==3.10.9',
   'ome-zarr==0.8.2',
-  'natsort==8.4.0',
-  'aicsimageio@git+https://github.com/camilolaiton/aicsimageio.git@feature/zarrwriter-multiscales-daskjobs'
+  'natsort==8.4.0'
 ]
 
 [project.optional-dependencies]
