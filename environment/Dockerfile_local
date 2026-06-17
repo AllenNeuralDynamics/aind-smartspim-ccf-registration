@@ -32,7 +32,7 @@ RUN for i in 1 2 3 4 5; do \
 RUN /opt/conda/envs/$CONDA_ENV/bin/pip install -U --no-cache-dir --use-deprecated=legacy-resolver \
     antspyx==0.6.3 \
     argschema==3.0.4 \
-    scikit-image==0.19.3 \
+    scikit-image==0.24.0 \
     tifffile==2022.10.10 \
     bokeh==3.8.2 \
     zarr==2.13.3 \
