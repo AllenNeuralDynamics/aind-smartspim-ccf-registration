@@ -19,7 +19,7 @@ RUN conda create -n $CONDA_ENV python=3.10 -y && \
     argschema==3.0.4 \
     scikit-image==0.19.3 \
     tifffile==2022.10.10 \
-    bokeh==2.4.2 \
+    bokeh==3.8.2 \
     zarr==2.13.3 \
     aind-data-schema==2.8.0 \
     "aind-data-schema-models>=5.7.1,<6" \

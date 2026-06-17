@@ -11,7 +11,6 @@ import multiprocessing
 import time
 from typing import List, Optional
 
-import czifile
 import numpy as np
 import tensorstore as ts
 
@@ -301,8 +300,8 @@ def zarr_writer(
 
     Parameters
     ----------
-    czi_path: str
-        Path where the CZI file is stored.
+    image_data: np.ndarray
+        Numpy array containing the image data.
 
     output_path: PathLike
         Path where we want to write the OMEZarr
