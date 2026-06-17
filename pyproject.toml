@@ -23,8 +23,8 @@ dependencies = [
   'aind-data-schema==2.8.0',
   'aind-data-schema-models>=5.7.1,<6',
   'psutil',
-  'xarray_multiscale==1.1.0',
   'dask[distributed]==2026.6.0',
+  'tensorstore==0.1.72',
   'matplotlib==3.10.9',
   'ome-zarr==0.8.2',
   'natsort==8.4.0'

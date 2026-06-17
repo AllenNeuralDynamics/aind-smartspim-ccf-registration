@@ -24,13 +24,13 @@ RUN conda create -n $CONDA_ENV python=3.10 -y && \
     aind-data-schema==2.8.0 \
     "aind-data-schema-models>=5.7.1,<6" \
     psutil \
-    xarray_multiscale==1.1.0 \
     dask[distributed]==2026.6.0 \
     cloud-volume[all_codecs]==11.0.2 \
     matplotlib==3.10.9 \
     ome-zarr==0.8.2 \
     natsort==8.4.0 \
     crackle-codec==0.26.0 \
+    tensorstore==0.1.72 \
     compresso \
     s3fs \
     boto3 \

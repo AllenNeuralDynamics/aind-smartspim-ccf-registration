@@ -11,18 +11,16 @@ Pipeline:
 from __future__ import annotations
 
 import logging
-import multiprocessing
 import os
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, Hashable, List, Sequence, Tuple, Union
+from typing import List, Tuple
 
 import ants
 from .zarr_writer.zarr_writer import zarr_writer
 import dask
 import dask.array as da
 import numpy as np
-import xarray_multiscale
 import zarr
 from aind_data_schema.components.identifiers import Code
 from aind_data_schema.core.processing import (
@@ -75,67 +73,6 @@ def pad_array_n_d(arr: ArrayLike, dim: int = 5) -> ArrayLike:
     while arr.ndim < dim:
         arr = arr[np.newaxis, ...]
     return arr
-
-
-def compute_pyramid(
-    data: dask.array.core.Array,
-    n_lvls: int,
-    scale_axis: Tuple[int],
-    chunks: Union[str, Sequence[int], Dict[Hashable, int]] = "auto",
-) -> List[dask.array.core.Array]:
-    """
-    Computes the pyramid levels given an input full resolution image data
-    Parameters
-    ------------------------
-    data: dask.array.core.Array
-        Dask array of the image data
-    n_lvls: int
-        Number of downsampling levels
-        that will be applied to the original image
-    scale_axis: Tuple[int]
-        Scaling applied to each axis
-    chunks: Union[str, Sequence[int], Dict[Hashable, int]]
-        chunksize that will be applied to the multiscales
-        Default: "auto"
-    Returns
-    ------------------------
-    List[dask.array.core.Array]:
-        List with the downsampled image(s)
-    """
-
-    pyramid = xarray_multiscale.multiscale(
-        data,
-        xarray_multiscale.reducers.windowed_mean,  # func
-        scale_axis,  # scale factors
-        preserve_dtype=True,
-        chunks=chunks,
-    )[:n_lvls]
-
-    return [arr.data for arr in pyramid]
-
-
-def get_pyramid_metadata() -> dict:
-    """
-    Gets pyramid metadata in OMEZarr format
-    Returns
-    ------------------------
-    dict:
-        Dictionary with the downscaling OMEZarr metadata
-    """
-
-    return {
-        "metadata": {
-            "description": """Downscaling implementation based on the
-                windowed mean of the original array""",
-            "method": "xarray_multiscale.reducers.windowed_mean",
-            "version": str(xarray_multiscale.__version__),
-            "args": "[false]",
-            # No extra parameters were used different
-            # from the orig. array and scales
-            "kwargs": {},
-        }
-    }
-
 
 class Register(ArgSchemaParser):
     """
