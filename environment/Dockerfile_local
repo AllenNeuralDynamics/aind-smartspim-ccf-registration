@@ -12,9 +12,24 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends gcc g++ build-essential && \
     rm -rf /var/lib/apt/lists/*
 
-# Create env and install packages
-RUN conda create -n $CONDA_ENV python=3.10 -y && \
-    /opt/conda/envs/$CONDA_ENV/bin/pip install -U --no-cache-dir --use-deprecated=legacy-resolver \
+# Make conda resilient to conda-forge rate limiting (HTTP 429):
+# more retries, exponential backoff, and a single fetch thread to avoid
+# tripping the per-IP request limit.
+RUN conda config --set remote_max_retries 10 && \
+    conda config --set remote_backoff_factor 5 && \
+    conda config --set remote_connect_timeout_secs 30 && \
+    conda config --set fetch_threads 1
+
+# Create the env, retrying on transient conda-forge 429s
+RUN for i in 1 2 3 4 5; do \
+        conda create -n $CONDA_ENV python=3.10 -y && break; \
+        echo "conda create failed (attempt $i/5), retrying in 30s..."; \
+        sleep 30; \
+    done && \
+    test -d /opt/conda/envs/$CONDA_ENV
+
+# Install Python packages
+RUN /opt/conda/envs/$CONDA_ENV/bin/pip install -U --no-cache-dir --use-deprecated=legacy-resolver \
     antspyx==0.6.3 \
     argschema==3.0.4 \
     scikit-image==0.19.3 \
@@ -34,7 +49,7 @@ RUN conda create -n $CONDA_ENV python=3.10 -y && \
     compresso \
     s3fs \
     boto3 \
-    log-schema==0.2.10.dev1 &&
+    log-schema==0.2.10.dev1 && \
     conda clean --all --yes
 
 # ------------------- #
