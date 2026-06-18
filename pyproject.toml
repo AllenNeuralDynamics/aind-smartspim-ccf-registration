@@ -6,32 +6,34 @@ build-backend = "setuptools.build_meta"
 name = "aind_ccf_reg"
 description = "Registers SmartSPIM lightsheet datasets to the Allen Common Coordinate Framework (CCF) atlas using ANTs."
 license = {text = "MIT"}
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 classifiers = [
     "Programming Language :: Python :: 3"
 ]
 dynamic = ["version", "readme"]
 
 dependencies = [
+  'numpy==1.26.4',
   'antspyx==0.6.3',
   'argschema==3.0.4',
-  's3fs',
-  'boto3',
-  'scikit-image==0.24.0',
+  'scikit-image==0.19.3',
   'tifffile==2022.10.10',
   'bokeh==3.8.2',
-  'zarr==2.13.3',
+  'zarr==2.13.3 ',
+  'numcodecs==0.14.1',
   'aind-data-schema==2.8.0',
   'aind-data-schema-models>=5.7.1,<6',
   'psutil',
   'dask[distributed]==2026.6.0',
-  'tensorstore==0.1.72',
   'cloud-volume[all_codecs]==11.0.2',
-  'crackle-codec==0.26.0',
-  'compresso',
   'matplotlib==3.10.9',
   'ome-zarr==0.8.2',
   'natsort==8.4.0',
+  'crackle-codec==0.26.0',
+  'tensorstore==0.1.72',
+  'compresso',
+  's3fs',
+  'boto3',
   'log-schema==0.2.10.dev1'
 ]
 
