@@ -6,6 +6,7 @@ import json
 import os
 import sys
 import tempfile
+import time
 import unittest
 from unittest.mock import MagicMock
 
@@ -21,6 +22,10 @@ for _mod in [
     "aind_data_schema",
     "aind_data_schema.core",
     "aind_data_schema.core.processing",
+    "aind_data_schema.components",
+    "aind_data_schema.components.identifiers",
+    "aind_data_schema_models",
+    "aind_data_schema_models.units",
 ]:
     sys.modules.setdefault(_mod, MagicMock())
 # ─────────────────────────────────────────────────────────────────────────────
@@ -573,6 +578,27 @@ class TestGetEstimatedDownsample(unittest.TestCase):
         """Function should work with the default registration_res."""
         result = get_estimated_downsample([1.8, 1.8, 2.0])
         self.assertIsInstance(result, int)
+
+
+class TestResourceMonitor(unittest.TestCase):
+    """Smoke test for the ResourceMonitor sampler."""
+
+    def test_resource_monitor(self):
+        """Collects samples and produces a ResourceUsage object."""
+        from aind_ccf_reg.utils import ResourceMonitor, ResourceUsage
+
+        # The test suite mocks aind_data_schema on environments where the
+        # real package fails to import; the smoke test only makes sense
+        # against the real schema models.
+        if isinstance(ResourceUsage, MagicMock):
+            self.skipTest("aind_data_schema is mocked in this environment")
+
+        monitor = ResourceMonitor(interval_seconds=0.1).start()
+        time.sleep(0.3)
+        monitor.stop()
+        usage = monitor.to_resource_usage(cpu_cores=2)
+        self.assertIsInstance(usage, ResourceUsage)
+        self.assertGreater(len(usage.cpu_usage), 0)
 
 
 if __name__ == "__main__":

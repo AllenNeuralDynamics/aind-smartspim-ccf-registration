@@ -9,8 +9,9 @@ import logging
 import multiprocessing
 import os
 import platform
+import threading
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from glob import glob
 from pathlib import Path
 from typing import List, Optional, Union
@@ -21,8 +22,14 @@ import psutil
 import pydantic
 import scipy.ndimage as ndi
 from aind_ccf_reg.configs import PathLike
-from aind_data_schema.core.processing import (DataProcess, PipelineProcess,
-                                              Processing)
+from aind_data_schema.components.identifiers import Code
+from aind_data_schema.core.processing import (
+    DataProcess,
+    Processing,
+    ResourceTimestamped,
+    ResourceUsage,
+)
+from aind_data_schema_models.units import MemoryUnit
 from cloudvolume import CloudVolume
 
 
@@ -158,45 +165,128 @@ def get_channel_translations(
 def generate_processing(
     data_processes: List[DataProcess],
     dest_processing: PathLike,
-    processor_full_name: str,
+    pipeline_name: str,
     pipeline_version: str,
-):
+    pipeline_url: str,
+) -> None:
     """
-    Generates data description for the output folder.
+    Generates the processing.json metadata for the output folder.
 
     Parameters
     ------------------------
 
-    data_processes: List[dict]
-        List with the processes aplied in the pipeline.
+    data_processes: List[DataProcess]
+        List with the processes applied in the pipeline.
 
     dest_processing: PathLike
-        Path where the processing file will be placed.
+        Directory where the processing.json file will be placed.
 
-    processor_full_name: str
-        Person in charged of running the pipeline
-        for this data asset
+    pipeline_name: str
+        Name of the pipeline. Must match the ``pipeline_name`` set on each
+        ``DataProcess`` for graph validation.
 
     pipeline_version: str
-        Terastitcher pipeline version
+        Version of the pipeline.
+
+    pipeline_url: str
+        URL of the pipeline repository.
 
     """
 
-    processing_pipeline = PipelineProcess(
+    pipelines = [
+        Code(url=pipeline_url, name=pipeline_name, version=pipeline_version)
+    ]
+    processing = Processing.create_with_sequential_process_graph(
         data_processes=data_processes,
-        processor_full_name=processor_full_name,
-        pipeline_version=pipeline_version,
-        pipeline_url="https://github.com/AllenNeuralDynamics/aind-smartspim-pipeline",
-        note="Metadata for the CCF Atlas Registration step",
-    )
-
-    processing = Processing(
-        processing_pipeline=processing_pipeline,
-        notes="This processing only contains metadata of ccf registration \
-            and needs to be compiled with other steps at the end",
+        pipelines=pipelines,
+        notes="Metadata for the CCF Atlas Registration step. This processing "
+        "only contains metadata of ccf registration and needs to be "
+        "compiled with other steps at the end.",
     )
 
     processing.write_standard_file(output_directory=dest_processing)
+
+
+class ResourceMonitor:
+    """
+    Background sampler for CPU and RAM usage during a processing step.
+
+    Samples ``psutil`` at a fixed interval on a daemon thread and converts
+    the collected samples into an ``aind_data_schema`` ``ResourceUsage``.
+    """
+
+    def __init__(self, interval_seconds: Optional[float] = 1.0):
+        """
+        Parameters
+        ----------
+        interval_seconds: Optional[float]
+            Sampling interval in seconds. Default 1.0.
+        """
+        self._interval = interval_seconds
+        self._cpu_usage: List[ResourceTimestamped] = []
+        self._ram_usage: List[ResourceTimestamped] = []
+        self._stop_event = threading.Event()
+        self._thread = threading.Thread(target=self._run, daemon=True)
+
+    def _run(self) -> None:
+        """Sampling loop running on the daemon thread."""
+        while not self._stop_event.is_set():
+            now = datetime.now(timezone.utc)
+            self._cpu_usage.append(
+                ResourceTimestamped(
+                    timestamp=now, usage=psutil.cpu_percent(interval=None)
+                )
+            )
+            self._ram_usage.append(
+                ResourceTimestamped(
+                    timestamp=now, usage=psutil.virtual_memory().percent
+                )
+            )
+            self._stop_event.wait(self._interval)
+
+    def start(self) -> "ResourceMonitor":
+        """Prime the CPU sampler and start the monitoring thread."""
+        psutil.cpu_percent(interval=None)  # prime the first sample
+        self._thread.start()
+        return self
+
+    def stop(self) -> None:
+        """Signal the monitoring thread to stop and join it."""
+        self._stop_event.set()
+        self._thread.join(timeout=self._interval + 1)
+
+    def __enter__(self) -> "ResourceMonitor":
+        return self.start()
+
+    def __exit__(self, *exc_info) -> None:
+        self.stop()
+
+    def to_resource_usage(
+        self, cpu_cores: Optional[int] = None
+    ) -> ResourceUsage:
+        """
+        Builds a ``ResourceUsage`` from the collected samples.
+
+        Parameters
+        ----------
+        cpu_cores: Optional[int]
+            Number of CPU cores allocated to the job.
+
+        Returns
+        -------
+        ResourceUsage
+        """
+        return ResourceUsage(
+            os=platform.system(),
+            architecture=platform.machine(),
+            cpu_cores=cpu_cores,
+            system_memory=round(
+                psutil.virtual_memory().total / (1024**3), 2
+            ),
+            system_memory_unit=MemoryUnit.GB,
+            cpu_usage=self._cpu_usage,
+            ram_usage=self._ram_usage,
+        )
 
 
 def rotate_image(img: np.array, in_mat: np.array, reverse: bool):

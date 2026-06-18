@@ -20,7 +20,7 @@ from aind_ccf_reg import (
 from aind_ccf_reg.utils import create_folder, read_json_as_dict
 from natsort import natsorted
 from ome_zarr.reader import Reader
-from schlog import setup_logging
+from log_schema import setup_logging
 
 logger = logging.getLogger(__name__)
 
