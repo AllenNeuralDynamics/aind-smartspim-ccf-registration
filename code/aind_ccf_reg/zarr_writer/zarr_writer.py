@@ -356,8 +356,8 @@ def zarr_writer(
     extra_axes = (1,) * (5 - len(dataset_shape))
     dataset_shape = extra_axes + dataset_shape
 
-    shard_size = ([1] * (5 - len(shard_size))) + shard_size
-    chunk_size = ([1] * (5 - len(chunk_size))) + chunk_size
+    shard_size = ([1] * (5 - len(shard_size))) + list(shard_size)
+    chunk_size = ([1] * (5 - len(chunk_size))) + list(chunk_size)
 
     # Getting channel color
     channel_colors = None
