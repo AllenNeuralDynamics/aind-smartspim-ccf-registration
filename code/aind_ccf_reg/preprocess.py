@@ -315,7 +315,7 @@ class Preprocess:
         weight_mask=None,
     ):
         """N4 Bias Field Correction
-        https://antspy.readthedocs.io/en/latest/utils.html#ants.utils.bias_correction.n4_bias_field_correction
+        https://antspy.readthedocs.io/en/latest/utils.html#ants.n4_bias_field_correction
         """
         logger.info("Computing N4")
         n4_bias_params = {
@@ -331,7 +331,7 @@ class Preprocess:
 
         logger.info(f"Parameters -> {n4_bias_params}")
         start_time = datetime.now()
-        ants_img_n4 = ants.utils.n4_bias_field_correction(
+        ants_img_n4 = ants.n4_bias_field_correction(
             ants_img, **n4_bias_params
         )
         end_time = datetime.now()
