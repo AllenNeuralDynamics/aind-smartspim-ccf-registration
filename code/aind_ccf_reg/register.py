@@ -1014,12 +1014,14 @@ class Register(ArgSchemaParser):
         resource_monitor = ResourceMonitor(interval_seconds=30.0).start()
         image_name = "image.zarr"
 
+        # Blosc codec configuration for the tensorstore Zarr v3 writer.
+        # This dict is passed straight into the zarr3 "blosc" codec config,
+        # so it must use tensorstore's keys (cname/clevel/shuffle), not a
+        # numcodecs Blosc object.
         opts = {
-            "compressor": blosc.Blosc(
-                cname=self.args["OMEZarr_params"]["compressor"],
-                clevel=self.args["OMEZarr_params"]["clevel"],
-                shuffle=blosc.SHUFFLE,
-            )
+            "cname": self.args["OMEZarr_params"]["compressor"],
+            "clevel": self.args["OMEZarr_params"]["clevel"],
+            "shuffle": "shuffle",
         }
 
         aligned_image_dask = da.from_array(no_norm_aligned_image)

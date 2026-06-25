@@ -359,6 +359,7 @@ def main() -> None:
                     "clevel": 1,
                     "compressor": "zstd",
                     "chunks": (64, 64, 64),
+                    "n_lvls": 4,
                 },
                 "ng_params": {
                     "save_path": precompute_path,
