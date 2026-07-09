@@ -178,7 +178,18 @@ def main() -> None:
             # Getting highest wavelenght as default for registration
             channel_to_register = sorted_channels[-1]
             dataset_name = channel_to_register
-            additional_channels = pipeline_config["segmentation"]["channels"]
+            # Deduplicate and drop the registration channel: it is already
+            # processed by the main registration flow, and re-processing it in
+            # the additional-channels loop overwrites the same output path and
+            # produces duplicate DataProcess names (which fails the
+            # processing.json unique-name validation).
+            additional_channels = [
+                channel
+                for channel in dict.fromkeys(
+                    pipeline_config["segmentation"]["channels"]
+                )
+                if channel != channel_to_register
+            ]
 
             # Create output folders
             results_folder = f"../results/ccf_{channel_to_register}"
