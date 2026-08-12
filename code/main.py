@@ -14,6 +14,7 @@ from aind_ccf_reg import (
     __pipeline_name__,
     __title__,
     __version__,
+    metadata_compat,
     register,
     utils,
 )
@@ -163,12 +164,15 @@ def main() -> None:
         # it means there are no segmentation channels splitted
         if channels_to_process is not None and len(channels_to_process):
             acquisition_json = read_json_as_dict(acquisition_path)
-            acquisition_orientation = acquisition_json.get("axes")
 
-            if acquisition_orientation is None:
+            try:
+                acquisition_orientation = metadata_compat.get_acquisition_axes(
+                    acquisition_json
+                )
+            except ValueError as e:
                 raise ValueError(
                     f"Please, provide a valid acquisition orientation, acquisition: {acquisition_json}"
-                )
+                ) from e
 
             # Setting parameters based on pipeline
             sorted_channels = natsorted(
