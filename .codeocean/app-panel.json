@@ -1,0 +1,36 @@
+{
+	"version": 1,
+	"named_parameters": true,
+	"parameters": [
+		{
+			"id": "Rg1Ch4nSel3ctPn0",
+			"name": "Registration channel",
+			"param_name": "registration-channel",
+			"description": "Channel to register, e.g. Ex_639_Em_680",
+			"help_text": "Leave blank to take the channel from processing_manifest.json, which is what the SmartSPIM pipeline does. Setting it names the channel directly and skips the manifest entirely, so a brain can be re-registered on a different channel without authoring and uploading a copy of that file.",
+			"type": "text",
+			"value_type": "string",
+			"default_value": ""
+		},
+		{
+			"id": "Acq1s1t10nJs0nPt",
+			"name": "Acquisition JSON path",
+			"param_name": "acquisition-json",
+			"description": "Explicit path to acquisition.json",
+			"help_text": "Leave blank to search ../data, first at the root (where the pipeline stages it) and then one level inside each mount (where an attached data asset puts it). Set this only to disambiguate when several mounts carry an acquisition.json.",
+			"type": "text",
+			"value_type": "string",
+			"default_value": ""
+		},
+		{
+			"id": "Pr0cM4n1f3stPth",
+			"name": "Processing manifest path",
+			"param_name": "processing-manifest",
+			"description": "Explicit path to processing_manifest.json",
+			"help_text": "Leave blank to search ../data the same way as the acquisition JSON. Ignored when a registration channel is given, since the manifest is then not read at all.",
+			"type": "text",
+			"value_type": "string",
+			"default_value": ""
+		}
+	]
+}
