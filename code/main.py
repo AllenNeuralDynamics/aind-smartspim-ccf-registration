@@ -124,6 +124,14 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--image-folder",
+        default=os.environ.get("IMAGE_FOLDER"),
+        help=(
+            "Folder holding the fused <channel>.zarr stores. Defaults to a "
+            "search under ../data."
+        ),
+    )
+    parser.add_argument(
         "--acquisition-json",
         default=os.environ.get("ACQUISITION_JSON"),
         help="Path to acquisition.json. Defaults to a search under ../data.",
@@ -192,6 +200,60 @@ def resolve_input_path(
     return matches[0] if matches else None
 
 
+def resolve_image_folder(
+    data_folder: str, explicit: Optional[str] = None
+) -> Optional[str]:
+    """
+    Find the folder holding the fused ``<channel>.zarr`` stores.
+
+    The pipeline hands this capsule a ``fused`` folder built by the fusing
+    step. Re-registering an already-processed brain instead means mounting its
+    stitched asset, where the same stores live under
+    ``image_tile_fusing/OMEZarr``. A mount pointed straight at that prefix is
+    also common, so candidates are confirmed by looking for channel stores
+    inside them rather than by trusting the folder name.
+
+    Parameters
+    ----------
+    data_folder : str
+        Absolute path to the capsule's data folder.
+    explicit : str, optional
+        Caller-supplied path, returned as-is when set.
+
+    Returns
+    -------
+    str or None
+        Folder containing the channel zarrs, or ``None`` if none is found.
+
+    Raises
+    ------
+    ValueError
+        If several mounts offer channel stores, since silently taking one
+        would register whichever the glob happened to sort first.
+    """
+    if explicit:
+        return explicit
+
+    root = os.path.join(data_folder, "fused")
+    if os.path.isdir(root):
+        return root
+
+    for pattern in ("*/image_tile_fusing/OMEZarr", "*/fused", "*"):
+        found = [
+            path
+            for path in sorted(glob(os.path.join(data_folder, pattern)))
+            if os.path.isdir(path) and glob(os.path.join(path, "*_Em_*.zarr"))
+        ]
+        if len(found) > 1:
+            raise ValueError(
+                f"Found channel zarrs in several mounts: {found}. "
+                "Pass an explicit path to disambiguate."
+            )
+        if found:
+            return found[0]
+    return None
+
+
 def build_pipeline_config(data_folder: str, args: argparse.Namespace) -> dict:
     """
     Build the registration config, from an override or the manifest.
@@ -247,7 +309,10 @@ def main() -> None:
     args = parse_args()
     data_folder = os.path.abspath("../data")
     results_path = os.path.abspath("../results")
-    image_folder = os.path.abspath("../data/fused")
+
+    image_folder = resolve_image_folder(data_folder, args.image_folder)
+    if image_folder is None:
+        raise ValueError("No folder with fused channel zarrs found!")
 
     acquisition_path = resolve_input_path(
         data_folder, "acquisition.json", args.acquisition_json

@@ -13,6 +13,16 @@
 			"default_value": ""
 		},
 		{
+			"id": "Im4g3F0ld3rPth01",
+			"name": "Image folder",
+			"param_name": "image-folder",
+			"description": "Folder holding the fused <channel>.zarr stores",
+			"help_text": "Leave blank to search ../data: the pipeline's own fused folder, then a mounted stitched asset's image_tile_fusing/OMEZarr, then any mount that directly holds channel zarrs. Candidates are confirmed by looking for the stores inside them, not by folder name. Set this only to disambiguate when several mounts offer channel zarrs.",
+			"type": "text",
+			"value_type": "string",
+			"default_value": ""
+		},
+		{
 			"id": "Acq1s1t10nJs0nPt",
 			"name": "Acquisition JSON path",
 			"param_name": "acquisition-json",
