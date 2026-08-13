@@ -2,10 +2,12 @@
 Main used in code ocean to execute capsule
 """
 
+import argparse
 import math
 import multiprocessing
 import os
-from typing import List, Tuple
+from glob import glob
+from typing import List, Optional, Sequence, Tuple
 
 import zarr
 from aind_ccf_reg import register, utils
@@ -92,27 +94,168 @@ def get_estimated_downsample(
     return int(round(math.log2(downsample_factor)))
 
 
-def main() -> None:
+def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     """
-    Main function to register a dataset
-    """
-    data_folder = os.path.abspath("../data")
-    results_path = os.path.abspath("../results")
-    image_folder = os.path.abspath("../data/fused")
-    processing_manifest_path = f"{data_folder}/processing_manifest.json"
-    acquisition_path = f"{data_folder}/acquisition.json"
+    Parse the optional overrides this capsule accepts.
 
-    if not os.path.exists(processing_manifest_path):
+    All default to ``None``, in which case the capsule behaves exactly as it
+    does inside the SmartSPIM pipeline. Code Ocean sends every declared
+    app-panel field on every run, passing an empty string for the ones left
+    alone, so blanks are normalised to ``None`` -- otherwise "not specified"
+    would arrive as "specified as empty".
+
+    Parameters
+    ----------
+    argv : Sequence[str], optional
+        Argument vector to parse. Defaults to ``sys.argv[1:]``.
+
+    Returns
+    -------
+    argparse.Namespace
+        Parsed options, each either a non-empty string or ``None``.
+    """
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--registration-channel",
+        default=os.environ.get("REGISTRATION_CHANNEL"),
+        help=(
+            "Channel to register, e.g. Ex_639_Em_680. When given, the "
+            "processing manifest is not read at all."
+        ),
+    )
+    parser.add_argument(
+        "--acquisition-json",
+        default=os.environ.get("ACQUISITION_JSON"),
+        help="Path to acquisition.json. Defaults to a search under ../data.",
+    )
+    parser.add_argument(
+        "--processing-manifest",
+        default=os.environ.get("PROCESSING_MANIFEST"),
+        help=(
+            "Path to processing_manifest.json. Defaults to a search under "
+            "../data. Ignored when --registration-channel is given."
+        ),
+    )
+    # Unknown args are tolerated so an app panel can grow fields without
+    # breaking a pinned capsule version.
+    args, _ = parser.parse_known_args(argv)
+    for name, value in vars(args).items():
+        if isinstance(value, str) and not value.strip():
+            setattr(args, name, None)
+    return args
+
+
+def resolve_input_path(
+    data_folder: str, filename: str, explicit: Optional[str] = None
+) -> Optional[str]:
+    """
+    Find an input JSON at the ``/data`` root or one level inside a mount.
+
+    The pipeline stages these files directly into ``../data`` via Nextflow, so
+    upstream only ever looks at the root. A standalone capsule run mounts each
+    data asset at ``../data/<mount>/`` instead, which puts the same file one
+    level deeper. Checking both lets one capsule serve both call sites.
+
+    Parameters
+    ----------
+    data_folder : str
+        Absolute path to the capsule's data folder.
+    filename : str
+        File to look for, e.g. ``acquisition.json``.
+    explicit : str, optional
+        Caller-supplied path, returned as-is when set.
+
+    Returns
+    -------
+    str or None
+        Path to the file, or ``None`` when it is not present.
+
+    Raises
+    ------
+    ValueError
+        If several mounts each carry the file, since picking one silently
+        would register against whichever the glob happened to sort first.
+    """
+    if explicit:
+        return explicit
+
+    root = os.path.join(data_folder, filename)
+    if os.path.exists(root):
+        return root
+
+    matches = sorted(glob(os.path.join(data_folder, "*", filename)))
+    if len(matches) > 1:
+        raise ValueError(
+            f"Found {filename} in several mounts: {matches}. "
+            "Pass an explicit path to disambiguate."
+        )
+    return matches[0] if matches else None
+
+
+def build_pipeline_config(data_folder: str, args: argparse.Namespace) -> dict:
+    """
+    Build the registration config, from an override or the manifest.
+
+    ``--registration-channel`` exists because the manifest contributes exactly
+    two values to this capsule -- the registration channels and the
+    segmentation channels -- while living in the raw dataset, which is not
+    always writable. Naming the channel directly avoids having to author and
+    upload a manifest to change one string.
+
+    Parameters
+    ----------
+    data_folder : str
+        Absolute path to the capsule's data folder.
+    args : argparse.Namespace
+        Parsed overrides from :func:`parse_args`.
+
+    Returns
+    -------
+    dict
+        The ``pipeline_processing`` mapping, real or synthesised.
+
+    Raises
+    ------
+    ValueError
+        If no override is given and no usable manifest can be found.
+    """
+    if args.registration_channel:
+        return {
+            "registration": {"channels": [args.registration_channel]},
+            "segmentation": {"channels": []},
+        }
+
+    manifest_path = resolve_input_path(
+        data_folder, "processing_manifest.json", args.processing_manifest
+    )
+    if manifest_path is None:
         raise ValueError("Processing manifest path does not exist!")
 
-    if not os.path.exists(acquisition_path):
-        raise ValueError("Acquisition path does not exist!")
-
-    pipeline_config = read_json_as_dict(processing_manifest_path)
+    pipeline_config = read_json_as_dict(manifest_path)
     pipeline_config = pipeline_config.get("pipeline_processing")
 
     if pipeline_config is None:
         raise ValueError("Please, provide a valid processing manifest")
+
+    return pipeline_config
+
+
+def main() -> None:
+    """
+    Main function to register a dataset
+    """
+    args = parse_args()
+    data_folder = os.path.abspath("../data")
+    results_path = os.path.abspath("../results")
+    image_folder = os.path.abspath("../data/fused")
+
+    acquisition_path = resolve_input_path(
+        data_folder, "acquisition.json", args.acquisition_json
+    )
+    if acquisition_path is None:
+        raise ValueError("Acquisition path does not exist!")
+
+    pipeline_config = build_pipeline_config(data_folder, args)
 
     registration_info = pipeline_config.get("registration")
 
@@ -172,9 +315,8 @@ def main() -> None:
         ]
         logger.info(f"Registration resolution (mm): {reg_res}")
 
-        logger.info(
-            f"Processing manifest {pipeline_config} provided in path {processing_manifest_path}"
-        )
+        logger.info(f"Processing config in use: {pipeline_config}")
+        logger.info(f"Acquisition read from: {acquisition_path}")
         logger.info(f"channel_to_register: {channel_to_register}")
 
         utils.print_system_information(logger)
