@@ -352,7 +352,7 @@ class Register(ArgSchemaParser):
         # This should be more convergence steps than are needed,
         # The idea here being to ensure that the algorithm actually converges
         if self.args["reference_res"] == 25:
-            reg_iterations = [1,1,1,1]#[500, 100, 50, 0]
+            reg_iterations = [500, 100, 50, 0]# [1,1,1,1]#
         elif self.args["reference_res"] == 10:
             reg_iterations = [500, 100, 50, 0]
         else:
@@ -460,6 +460,8 @@ class Register(ArgSchemaParser):
 
         prep = Preprocess(self.args, ants_img)
         ants_img, percentile_values = prep.run()
+        ants.image_write(ants_img,'/results/test_prep.nii.gz')
+        
         logger.info(f"Preprocessed input data {ants_img}")
         logger.info(f"percentile values: {percentile_values}")
 

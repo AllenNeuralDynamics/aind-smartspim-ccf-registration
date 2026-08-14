@@ -526,7 +526,7 @@ class Preprocess:
 
         ants_img = self.input_data # Removed resampling! 
         ants_img_mask = self.compute_mask(ants_img)
-        #ants_img = ants_img * ants_img_mask
+        ants_img = ants_img * ants_img_mask
         ants_img = self.compute_N4(ants_img,mask=ants_img_mask)
         vmin, vmax = np.min(ants_img.view()), np.max(ants_img.view())
 
