@@ -668,11 +668,22 @@ class Register(ArgSchemaParser):
             whichtoinvert=[True, False, True, False],
         )
 
-        ## Edited to remove non-ants numpy image hacks!
-        ## NEED TO CHECK THAT THE OUTPUT IS AS EXPECTED!!
-        aligned_image = ants.reorient_image2(aligned_image,ants_annotation.orientation)
+        # aligned_image comes back in ants_img's geometry -- the lightsheet's frame,
+        # and (since zarr_to_ants preserves the zarr's axis order) its (z, y, x)
+        # storage order. Do not reorient it here. A precomputed volume carries no
+        # affine -- its info holds only size and resolution -- so this array order is
+        # the only thing tying the parcellation to the zarr it parcellates. Putting
+        # the annotation into the atlas's frame keeps the anatomy correct for every
+        # affine-aware reader (Slicer, ITK, the nii.gz below) while silently rolling
+        # the Neuroglancer overlay, which is how this went unnoticed.
 
-        aligned_image_array = aligned_image.numpy()
+        # OME-Zarr describes its axes C-order (z, y, x); precomputed describes the
+        # same bytes F-order (x, y, z). Reversing the axis order relabels between the
+        # two conventions -- a strided view, no data is moved, and the emitted bytes
+        # are identical either way. `.T` rather than swapaxes(0, 2) because reversing
+        # ALL axes is what the relabelling means; the two coincide only in 3D, and
+        # CloudVolume's array is [x, y, z, channel].
+        aligned_image_array = aligned_image.numpy().T
 
         self._plot_write_antsimg(
             aligned_image,
@@ -681,8 +692,9 @@ class Register(ArgSchemaParser):
             vmax=1200,
         )
 
+        # Reversed with the array, so the declaration matches what was written.
         visual_spacing = tuple(
-            [s * 10**6 for s in aligned_image.spacing]
+            [s * 10**6 for s in aligned_image.spacing[::-1]]
         )
 
         ng_params["scale_params"]["res"] = visual_spacing
