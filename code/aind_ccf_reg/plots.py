@@ -5,52 +5,20 @@ regsitration results
 import numpy as np
 import matplotlib.pyplot as plt
 import ants
+from aind_anatomical_utils.ants_volume import regrid_axis_aligned_ants
 
-
-def _world_corners(img):
-    origin = np.asarray(img.origin, float)
-    spacing = np.asarray(img.spacing, float)
-    direction = np.asarray(img.direction, float)
-    shape = np.asarray(img.shape, int)
-
-    corners_ijk = np.array(
-        [
-            [0, 0, 0],
-            [shape[0] - 1, 0, 0],
-            [0, shape[1] - 1, 0],
-            [0, 0, shape[2] - 1],
-            [shape[0] - 1, shape[1] - 1, 0],
-            [shape[0] - 1, 0, shape[2] - 1],
-            [0, shape[1] - 1, shape[2] - 1],
-            [shape[0] - 1, shape[1] - 1, shape[2] - 1],
-        ],
-        dtype=float,
-    )
-
-    disp = corners_ijk * spacing
-    pts = origin + (direction @ disp.T).T
-    return pts
-
-
-def canonical_lps_reference_enclosing(img, spacing=None, pad_mm=0.0, dtype=np.float32):
-    if spacing is None:
-        spacing = np.asarray(img.spacing, float)
-    else:
-        spacing = np.asarray(spacing, float)
-
-    corners = _world_corners(img)
-    mins = corners.min(axis=0) - float(pad_mm)
-    maxs = corners.max(axis=0) + float(pad_mm)
-
-    size = np.ceil((maxs - mins) / spacing).astype(int) + 1
-    size = tuple(int(x) for x in size)
-
-    return ants.from_numpy(
-        np.zeros(size, dtype=dtype),
-        spacing=tuple(spacing.tolist()),
-        origin=tuple(mins.tolist()),
-        direction=np.eye(3),
-    )
+# The canonical-LPS reference grid used to be built here, by measuring the
+# world extent of the image and dividing by its spacing. Those two are indexed
+# differently -- the extent along world axes, the spacing in the image's index
+# order -- so they line up only when the image's index axes already match the
+# world axes. Flips were fine; any permutation produced a wrong-shaped grid and
+# a distorted plot. On the CCF annotation (axis-aligned, 944x1120x480) it built
+# a 944x1009x534 reference rather than a shape-preserving one.
+#
+# regrid_axis_aligned_ants does this properly: it permutes and flips to the
+# target orientation, so the result is invariant to the input's index order,
+# and for an axis-aligned volume it is exact -- no interpolation, which also
+# stops label volumes being blurred by the old interp_type="linear".
 
 
 def _robust_limits(arr, pct=(1, 99), ignore_zeros=True):
@@ -84,12 +52,12 @@ def plot_antsimgs(
       - Sagittal:       A on left, P on right
       - Superior up (coronal/sagittal)
 
-    Internally resamples to canonical LPS (identity direction) on an enclosing FOV (no crop).
+    Internally regrids to canonical LPS, so the display is independent of the
+    input's index order. Exact for axis-aligned volumes -- nothing is cropped,
+    resampled or interpolated.
     """
 
-    # Canonical LPS, enclosing grid to avoid cropping
-    ref = canonical_lps_reference_enclosing(ants_img, pad_mm=pad_mm)
-    img = ants.resample_image_to_target(ants_img, ref, interp_type=interpolation)
+    img = regrid_axis_aligned_ants(ants_img, "LPS")
 
     arr = img.numpy()
     sx, sy, sz = map(float, img.spacing)
@@ -225,11 +193,17 @@ def plot_reg(
     if loc not in (0, 1, 2):
         raise ValueError("loc must be 0, 1, or 2.")
 
-    # --- Canonical LPS reference (enclosing, no crop) ---
-    ref = canonical_lps_reference_enclosing(fixed, pad_mm=pad_mm)
-    fixed_lps  = ants.resample_image_to_target(fixed,  ref, interp_type=interpolation)
-    moving_lps = ants.resample_image_to_target(moving, ref, interp_type=interpolation)
-    warped_lps = ants.resample_image_to_target(warped, ref, interp_type=interpolation)
+    # --- Canonical LPS ---
+    # Regrid `fixed`, then bring the other two onto it, so all three still share
+    # one grid for the overlay while the grid itself no longer depends on
+    # `fixed`'s index order.
+    fixed_lps = regrid_axis_aligned_ants(fixed, "LPS")
+    moving_lps = ants.resample_image_to_target(
+        moving, fixed_lps, interp_type=interpolation
+    )
+    warped_lps = ants.resample_image_to_target(
+        warped, fixed_lps, interp_type=interpolation
+    )
 
     mov = moving_lps.numpy()
     fix = fixed_lps.numpy()
