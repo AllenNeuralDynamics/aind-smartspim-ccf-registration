@@ -1,4 +1,4 @@
-FROM registry.codeocean.allenneuraldynamics.org/published/1d42f62b-68e4-40b7-ab32-32225960c6a3:v2
+FROM registry.codeocean.allenneuraldynamics.org/published/1d42f62b-68e4-40b7-ab32-32225960c6a3:v1
 
 # Build on the published image of capsule 1d42f62b (this capsule's upstream) instead
 # of reinstalling its dependencies.
