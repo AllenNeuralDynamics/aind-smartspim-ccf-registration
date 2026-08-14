@@ -318,7 +318,7 @@ class Register(ArgSchemaParser):
             "outprefix": f"{self.args['results_folder']}/ls_to_template_affine_",
             "type_of_transform": "Affine",
             "reg_iterations": [0, 0, 0, 0],
-            "aff_iterations": [1,1,1,1],#[60, 30, 15, 5],
+            "aff_iterations": [60, 30, 15, 5],
             "aff_metric": "mattes",
             "verbose": True,
             "mask_all_stages": True,
