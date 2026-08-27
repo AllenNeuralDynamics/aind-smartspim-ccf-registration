@@ -446,13 +446,14 @@ def main() -> None:
                 "duration_seconds": duration_seconds,
             },
         )
-    except Exception:
+    except Exception as e:
         duration_seconds = round(time.monotonic() - start_time, 3)
         logger.error(
             "CCF registration failed",
             exc_info=True,
             extra={
                 "event_type": "stage_failure",
+                "error": f"{type(e).__name__}: {e}",
                 "dataset_name": dataset_name,
                 "asset_name": asset_name,
                 "channel": registration_channel,
