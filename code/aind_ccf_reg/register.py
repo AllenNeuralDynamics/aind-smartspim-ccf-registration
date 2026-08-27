@@ -421,8 +421,8 @@ class Register(ArgSchemaParser):
         ants_ccf = ants.image_read(
             os.path.abspath(self.args["ccf_reference_path"])
         )  # CCF template
-        logger.info(f"Loaded SPIM template {ants_template}")
-        logger.info(f"Loaded CCF template {ants_ccf}")
+        logger.debug(f"Loaded SPIM template {ants_template}")
+        logger.debug(f"Loaded CCF template {ants_ccf}")
 
         # ----------------------------------#
         # orient data to SPIM template's direction
@@ -450,7 +450,7 @@ class Register(ArgSchemaParser):
         ants_img.set_direction(ants_template.direction)
         ants_img.set_origin(ants_template.origin)
 
-        logger.info(f"Input image info: {ants_img}")
+        logger.debug(f"Input image info: {ants_img}")
 
         write_and_plot_image(
             ants_img,
@@ -463,21 +463,17 @@ class Register(ArgSchemaParser):
         # ----------------------------------#
         # run preprocessing on raw data
         # ----------------------------------#
-        logger.info(f"{'=='*40}")
         logger.info("Start preprocessing....")
-        logger.info(f"{'=='*40}")
 
         prep = Preprocess(self.args, ants_img, ants_template)
         ants_img, percentile_values = prep.run()
-        logger.info(f"Preprocessed input data {ants_img}")
+        logger.debug(f"Preprocessed input data {ants_img}")
         logger.info(f"percentile values: {percentile_values}")
 
         # ----------------------------------#
         # register brain image to template
         # ----------------------------------#
-        logger.info(f"{'=='*40}")
         logger.info("Start registering brain image to template....")
-        logger.info(f"{'=='*40}")
 
         # ants_img = ants.image_read(self.args["prep_params"].get("percNorm_path")) #
 
@@ -487,9 +483,7 @@ class Register(ArgSchemaParser):
         # ----------------------------------#
         # register brain image to CCF
         # ----------------------------------#
-        logger.info(f"{'=='*40}")
         logger.info("Start registering brain image to CCF....")
-        logger.info(f"{'=='*40}")
 
         # aligned_image = ants.image_read(self.args["ants_params"].get("moved_to_template_path")) #
 
@@ -499,9 +493,7 @@ class Register(ArgSchemaParser):
         # ----------------------------------#
         # register CCF annotation to brain space
         # ----------------------------------#
-        logger.info(f"{'=='*40}")
         logger.info("Start registering CCF annotation to brain space....")
-        logger.info(f"{'=='*40}")
 
         ccf_anno_to_template_deformed = ants.image_read(
             self.args["ccf_annotation_to_template_moved_path"]
@@ -578,15 +570,13 @@ class Register(ArgSchemaParser):
                 f"{ccf_type} is not a known CCF type. Options are 'reference' or 'annotation'"
             )
 
-        logger.info(f"Loaded SPIM template {ants_template}")
-        logger.info(f"Loaded CCF template {ants_ccf}")
+        logger.debug(f"Loaded SPIM template {ants_template}")
+        logger.debug(f"Loaded CCF template {ants_ccf}")
 
         # ----------------------------------#
         # register CCF to template space
         # ----------------------------------#
-        logger.info(f"{'=='*40}")
         logger.info("Start registering CCF to template space....")
-        logger.info(f"{'=='*40}")
 
         # apply transform
         aligned_image = ants.apply_transforms(
@@ -599,9 +589,7 @@ class Register(ArgSchemaParser):
         # ----------------------------------#
         # register CCF in template space to brain space
         # ----------------------------------#
-        logger.info(f"{'=='*40}")
         logger.info("Start registering CCF from template to brain space....")
-        logger.info(f"{'=='*40}")
 
         template_to_brain_transform_path = [
             f"{self.args['results_folder']}/ls_to_template_SyN_0GenericAffine.mat",
@@ -680,9 +668,7 @@ class Register(ArgSchemaParser):
         # ----------------------------------#
         # register CCF in template space to brain space
         # ----------------------------------#
-        logger.info(f"{'=='*40}")
         logger.info("Start registering CCF from template to brain space....")
-        logger.info(f"{'=='*40}")
 
         template_to_brain_transform_path = [
             f"{self.args['results_folder']}/ls_to_template_SyN_0GenericAffine.mat",
@@ -772,8 +758,8 @@ class Register(ArgSchemaParser):
         ants_ccf = ants.image_read(
             os.path.abspath(self.args["ccf_reference_path"])
         )  # CCF template
-        logger.info(f"Loaded SPIM template {ants_template}")
-        logger.info(f"Loaded CCF template {ants_ccf}")
+        logger.debug(f"Loaded SPIM template {ants_template}")
+        logger.debug(f"Loaded CCF template {ants_ccf}")
 
         # ----------------------------------#
         # orient data to SPIM template's direction
@@ -896,7 +882,7 @@ class Register(ArgSchemaParser):
             f"Input data: {input_data_path}\nOutput data: {output_data_path}\nMetadata path: {metadata_path}"
         )
 
-        logger.info(f"Regsitration results save to: {reg_folder}")
+        logger.info(f"Registration results save to: {reg_folder}")
 
         create_folder(output_data_path)
 
