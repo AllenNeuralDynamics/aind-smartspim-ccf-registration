@@ -356,7 +356,7 @@ def check_orientation(img: np.array, params: dict, orientations: dict):
     orient_mat = np.zeros((3, 3))
     acronym = ["", "", ""]
 
-    for k, vals in enumerate(params):
+    for vals in params:
         direction = vals["direction"].lower()
         dim = vals["dimension"]
         if direction in orientations.keys():
@@ -369,10 +369,12 @@ def check_orientation(img: np.array, params: dict, orientations: dict):
             orient_mat[dim, ref_axis] = -1
             acronym[dim] = direction[0]
 
-    # check because there was a bug that allowed for invalid spl orientation
-    # all vals should be postitive so just taking absolute value of matrix
+    # spl is not a real orientation: the acquisition writer recorded the
+    # left-right direction backwards and these brains are actually spr, so
+    # flip that axis only. The previous abs() flipped anterior-posterior too,
+    # which registered these datasets backwards along ap.
     if "".join(acronym) == "spl":
-        orient_mat = abs(orient_mat)
+        orient_mat[2] *= -1
 
     img_out, out_mat = rotate_image(img, orient_mat, False)
 
