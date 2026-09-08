@@ -7,6 +7,7 @@ import math
 import multiprocessing
 import os
 import time
+from pathlib import Path
 from typing import List, Tuple
 
 import zarr
@@ -14,6 +15,7 @@ from aind_ccf_reg import (
     __pipeline_name__,
     __title__,
     __version__,
+    metadata_compat,
     register,
     utils,
 )
@@ -137,6 +139,8 @@ def main() -> None:
     )
 
     dataset_name = None
+    asset_name = None
+    registration_channel = None
 
     try:
         if not os.path.exists(processing_manifest_path):
@@ -163,12 +167,15 @@ def main() -> None:
         # it means there are no segmentation channels splitted
         if channels_to_process is not None and len(channels_to_process):
             acquisition_json = read_json_as_dict(acquisition_path)
-            acquisition_orientation = acquisition_json.get("axes")
 
-            if acquisition_orientation is None:
+            try:
+                acquisition_orientation = metadata_compat.get_acquisition_axes(
+                    acquisition_json
+                )
+            except ValueError as e:
                 raise ValueError(
                     f"Please, provide a valid acquisition orientation, acquisition: {acquisition_json}"
-                )
+                ) from e
 
             # Setting parameters based on pipeline
             sorted_channels = natsorted(
@@ -177,7 +184,24 @@ def main() -> None:
 
             # Getting highest wavelenght as default for registration
             channel_to_register = sorted_channels[-1]
-            dataset_name = channel_to_register
+            registration_channel = channel_to_register
+
+            # Dataset identity from the stitched asset the manifest points at;
+            # this only feeds the log fields
+            stitching_s3_path = pipeline_config.get("stitching", {}).get("s3_path")
+            if stitching_s3_path:
+                asset_name = Path(str(stitching_s3_path).rstrip("/")).name
+                dataset_name = metadata_compat.get_raw_dataset_name(asset_name)
+
+            logger.info(
+                f"Processing derived asset {asset_name} - registration channel {channel_to_register}",
+                extra={
+                    "event_type": "dataset_resolved",
+                    "dataset_name": dataset_name,
+                    "asset_name": asset_name,
+                    "channel": channel_to_register,
+                },
+            )
             # Deduplicate and drop the registration channel: it is already
             # processed by the main registration flow, and re-processing it in
             # the additional-channels loop overwrites the same output path and
@@ -219,9 +243,8 @@ def main() -> None:
             ]
             logger.info(f"Registration resolution (mm): {reg_res}")
 
-            logger.info(
-                f"Processing manifest {pipeline_config} provided in path {processing_manifest_path}"
-            )
+            logger.info(f"Processing manifest provided in path {processing_manifest_path}")
+            logger.debug(f"Processing manifest content: {pipeline_config}")
             logger.info(f"channel_to_register: {channel_to_register}")
 
             utils.print_system_information(logger)
@@ -404,9 +427,8 @@ def main() -> None:
                 )
 
         else:
-            logger.info(
-                f"No registration channel, pipeline config: {pipeline_config}"
-            )
+            logger.warning("No registration channel provided in the processing manifest")
+            logger.debug(f"Pipeline config without registration channels: {pipeline_config}")
             results_folder = f"{results_path}"
             utils.save_dict_as_json(
                 filename=f"{results_folder}/registration_processing_manifest_empty.json",
@@ -419,17 +441,22 @@ def main() -> None:
             extra={
                 "event_type": "stage_complete",
                 "dataset_name": dataset_name,
+                "asset_name": asset_name,
+                "channel": registration_channel,
                 "duration_seconds": duration_seconds,
             },
         )
-    except Exception:
+    except Exception as e:
         duration_seconds = round(time.monotonic() - start_time, 3)
         logger.error(
             "CCF registration failed",
             exc_info=True,
             extra={
                 "event_type": "stage_failure",
+                "error": f"{type(e).__name__}: {e}",
                 "dataset_name": dataset_name,
+                "asset_name": asset_name,
+                "channel": registration_channel,
                 "duration_seconds": duration_seconds,
             },
         )
