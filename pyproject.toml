@@ -16,7 +16,7 @@ dependencies = [
   'numpy==1.26.4',
   'antspyx==0.6.3',
   'argschema==3.0.4',
-  'scikit-image==0.19.3',
+  'scikit-image==0.24.0',
   'tifffile==2022.10.10',
   'bokeh==3.8.2',
   'zarr==2.13.3 ',
