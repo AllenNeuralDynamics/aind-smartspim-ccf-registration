@@ -68,7 +68,7 @@ fail_under = 40
 
 [tool.ruff]
 line-length = 100
-extend-exclude = ["*.ipynb", ".venv", "*.egg-info", "build", "dist", "doc_template"]
+extend-exclude = ["*.ipynb", ".venv", "*.egg-info", "build", "dist"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "W"]
