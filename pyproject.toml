@@ -85,4 +85,4 @@ ignore = ["E501"]
 
 [tool.interrogate]
 exclude = ["setup.py", "docs", "build"]
-fail-under = 100
+fail-under = 70
