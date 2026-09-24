@@ -39,11 +39,9 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-  'black',
+  'ruff',
   'coverage',
-  'flake8',
   'interrogate',
-  'isort',
   'furo',
   'Sphinx'
 ]
@@ -54,27 +52,6 @@ where = ["code"]
 [tool.setuptools.dynamic]
 version = {attr = "aind_ccf_reg.__version__"}
 readme = {file = ["README.md"]}
-
-[tool.black]
-line-length = 79
-target_version = ['py37']
-exclude = '''
-
-(
-  /(
-      \.eggs         # exclude a few common directories in the
-    | \.git          # root of the project
-    | \.hg
-    | \.mypy_cache
-    | \.tox
-    | \.venv
-    | _build
-    | build
-    | dist
-  )/
-  | .gitignore
-)
-'''
 
 [tool.coverage.run]
 omit = ["*__init__*"]
@@ -89,8 +66,20 @@ exclude_lines = [
 ]
 fail_under = 40
 
-[tool.isort]
-line_length = 79
+[tool.ruff]
+line-length = 100
+extend-exclude = ["*.ipynb", ".venv", "*.egg-info", "build", "dist"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+# ruff format enforces line-length structurally; E501 only fires on tokens it
+# cannot split (URLs, long string literals), so the two rules conflict.
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"**/__init__.py" = ["F401"]
+# blosc.use_threads must be set before these imports execute.
+"code/aind_ccf_reg/register.py" = ["E402"]
 
 [tool.interrogate]
 exclude = ["setup.py", "docs", "build"]

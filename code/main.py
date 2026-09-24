@@ -20,9 +20,9 @@ from aind_ccf_reg import (
     utils,
 )
 from aind_ccf_reg.utils import create_folder, read_json_as_dict
+from log_schema import setup_logging
 from natsort import natsorted
 from ome_zarr.reader import Reader
-from log_schema import setup_logging
 
 logger = logging.getLogger(__name__)
 
@@ -94,8 +94,7 @@ def get_estimated_downsample(
         Estimated downsample level.
     """
     ratios = [
-        registration_res[i] / float(voxel_resolution[i])
-        for i in range(len(voxel_resolution))
+        registration_res[i] / float(voxel_resolution[i]) for i in range(len(voxel_resolution))
     ]
 
     # Choose the smallest ratio across dimensions (safest valid downsample factor)
@@ -169,18 +168,14 @@ def main() -> None:
             acquisition_json = read_json_as_dict(acquisition_path)
 
             try:
-                acquisition_orientation = metadata_compat.get_acquisition_axes(
-                    acquisition_json
-                )
+                acquisition_orientation = metadata_compat.get_acquisition_axes(acquisition_json)
             except ValueError as e:
                 raise ValueError(
                     f"Please, provide a valid acquisition orientation, acquisition: {acquisition_json}"
                 ) from e
 
             # Setting parameters based on pipeline
-            sorted_channels = natsorted(
-                pipeline_config["registration"]["channels"]
-            )
+            sorted_channels = natsorted(pipeline_config["registration"]["channels"])
 
             # Getting highest wavelenght as default for registration
             channel_to_register = sorted_channels[-1]
@@ -209,9 +204,7 @@ def main() -> None:
             # processing.json unique-name validation).
             additional_channels = [
                 channel
-                for channel in dict.fromkeys(
-                    pipeline_config["segmentation"]["channels"]
-                )
+                for channel in dict.fromkeys(pipeline_config["segmentation"]["channels"])
                 if channel != channel_to_register
             ]
 
@@ -219,28 +212,20 @@ def main() -> None:
             results_folder = f"../results/ccf_{channel_to_register}"
             create_folder(results_folder)
             metadata_folder = os.path.abspath(f"{results_folder}/metadata")
-            reg_folder = os.path.abspath(
-                f"{metadata_folder}/registration_metadata"
-            )
+            reg_folder = os.path.abspath(f"{metadata_folder}/registration_metadata")
             create_folder(reg_folder)
             create_folder(metadata_folder)
 
             # Calculate downsample for registration
-            zarr_attrs_path = os.path.join(
-                image_folder, f"{channel_to_register}.zarr/.zattrs"
-            )
+            zarr_attrs_path = os.path.join(image_folder, f"{channel_to_register}.zarr/.zattrs")
             acquisition_metadata = utils.read_json_as_dict(zarr_attrs_path)
-            acquisition_res = acquisition_metadata["multiscales"][0][
-                "datasets"
-            ][0]["coordinateTransformations"][0]["scale"][2:]
-            logger.info(
-                f"Image was acquired at resolution (um): {acquisition_res}"
-            )
+            acquisition_res = acquisition_metadata["multiscales"][0]["datasets"][0][
+                "coordinateTransformations"
+            ][0]["scale"][2:]
+            logger.info(f"Image was acquired at resolution (um): {acquisition_res}")
             reg_scale = get_estimated_downsample(acquisition_res)
             logger.info(f"Image is being downsampled by a factor: {reg_scale}")
-            reg_res = [
-                (float(res) * 2**reg_scale) / 1000 for res in acquisition_res
-            ]
+            reg_res = [(float(res) * 2**reg_scale) / 1000 for res in acquisition_res]
             logger.info(f"Registration resolution (mm): {reg_res}")
 
             logger.info(f"Processing manifest provided in path {processing_manifest_path}")
@@ -286,9 +271,7 @@ def main() -> None:
                 template_to_ccf_transform_warp_path,
                 template_to_ccf_transform_affine_path,
             ]
-            logger.info(
-                f"template_to_ccf_transform_path: {template_to_ccf_transform_path}"
-            )
+            logger.info(f"template_to_ccf_transform_path: {template_to_ccf_transform_path}")
 
             ccf_to_template_transform_warp_path = os.path.abspath(
                 f"{data_folder}/lightsheet_template_ccf_registration/spim_template_to_ccf_syn_1InverseWarp_25.nii.gz"
@@ -299,9 +282,7 @@ def main() -> None:
                 ccf_to_template_transform_warp_path,
             ]
 
-            logger.info(
-                f"ccf_to_template_transform_path: {ccf_to_template_transform_path}"
-            )
+            logger.info(f"ccf_to_template_transform_path: {ccf_to_template_transform_path}")
 
             ccf_annotation_to_template_moved_path = os.path.abspath(
                 f"{data_folder}/lightsheet_template_ccf_registration/ccf_annotation_to_template_moved_25.nii.gz"
@@ -334,12 +315,8 @@ def main() -> None:
 
             # ---------------------------------------------------#
 
-            regions = read_json_as_dict(
-                "../code/aind_ccf_reg/ccf_files/annotation_map.json"
-            )
-            precompute_path = os.path.abspath(
-                "../results/ccf_annotation_precomputed"
-            )
+            regions = read_json_as_dict("../code/aind_ccf_reg/ccf_files/annotation_map.json")
+            precompute_path = os.path.abspath("../results/ccf_annotation_precomputed")
             create_folder(precompute_path)
             create_folder(f"{precompute_path}/segment_properties")
 

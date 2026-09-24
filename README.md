@@ -2,6 +2,7 @@
 
 [![License](https://img.shields.io/badge/license-MIT-brightgreen)](LICENSE)
 ![Code Style](https://img.shields.io/badge/code%20style-black-black)
+![support](https://img.shields.io/badge/support-supported-brightgreen)
 
 Source code to register SmartSPIM lightsheet datasets to the Allen Common Coordinate Framework (CCF) atlas. This module is part of a larger pipeline and is compatible with the Code Ocean Pipeline feature.
 

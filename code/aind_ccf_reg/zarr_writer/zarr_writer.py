@@ -6,6 +6,7 @@ to zarr.
 """
 
 import asyncio
+import json
 import logging
 import multiprocessing
 import time
@@ -14,11 +15,8 @@ from typing import List, Optional
 import numpy as np
 import tensorstore as ts
 
-from .omezarr_metadata import (
-    _get_pyramid_metadata,
-    write_ome_ngff_metadata,
-)
-import json
+from .omezarr_metadata import _get_pyramid_metadata, write_ome_ngff_metadata
+
 
 def create_spec(
     output_path: str,
@@ -75,9 +73,7 @@ def create_spec(
     if cpu_cnt is None:
         cpu_cnt = multiprocessing.cpu_count()
 
-    zyx_resolution = [
-        f"{r}um" if r is not None else None for r in zyx_resolution
-    ]
+    zyx_resolution = [f"{r}um" if r is not None else None for r in zyx_resolution]
     zyx_resolution = [None] * (5 - len(zyx_resolution)) + zyx_resolution
 
     kvstore_dict = {
@@ -351,7 +347,7 @@ def zarr_writer(
     """
     output_path = f"{output_path}/{stack_name}"
     start_time = time.time()
-    
+
     dataset_shape = tuple(i for i in image_data.shape if i != 1)
     extra_axes = (1,) * (5 - len(dataset_shape))
     dataset_shape = extra_axes + dataset_shape
@@ -362,9 +358,7 @@ def zarr_writer(
     # Getting channel color
     channel_colors = None
 
-    logger.info(
-        f"Writing from {stack_name} to {output_path} bucket {bucket_name}"
-    )
+    logger.info(f"Writing from {stack_name} to {output_path} bucket {bucket_name}")
 
     if np.issubdtype(image_data.dtype, np.integer):
         np_info_func = np.iinfo

@@ -35,9 +35,7 @@ def execute_command_helper(command: str, print_command: bool = False) -> None:
     if print_command:
         print(command)
 
-    popen = subprocess.Popen(
-        command, stdout=subprocess.PIPE, universal_newlines=True, shell=True
-    )
+    popen = subprocess.Popen(command, stdout=subprocess.PIPE, universal_newlines=True, shell=True)
     for stdout_line in iter(popen.stdout.readline, ""):
         yield str(stdout_line).strip()
     popen.stdout.close()
@@ -58,9 +56,7 @@ def register_datasets(path_to_datasets: str):
         are located
     """
     # flake8: noqa: W605
-    date_structure = (
-        "(20\d{2}-(\d\d{1})-(\d\d{1}))(_|-)((\d{2})-(\d{2})-(\d{2}))"
-    )
+    date_structure = "(20\d{2}-(\d\d{1})-(\d\d{1}))(_|-)((\d{2})-(\d{2})-(\d{2}))"
 
     smartspim_id = "SmartSPIM_(\d{7}|\d{6})"
     smartspim_id_regex = "({})".format(smartspim_id)
@@ -83,9 +79,7 @@ def register_datasets(path_to_datasets: str):
             for out in execute_command_helper(cmd):
                 logger.info(out)
         except ValueError as err:
-            logger.error(
-                f"An error occured while executing {dataset} err: {err}"
-            )
+            logger.error(f"An error occured while executing {dataset} err: {err}")
 
 
 if __name__ == "__main__":

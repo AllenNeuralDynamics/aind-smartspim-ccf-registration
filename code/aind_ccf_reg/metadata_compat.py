@@ -76,7 +76,9 @@ def get_acquisition_axes(acquisition_config: Dict) -> List[Dict]:
     ]
 
 
-def get_voxel_resolution(acquisition_config: Dict) -> Tuple[float, float, float]:
+def get_voxel_resolution(
+    acquisition_config: Dict,
+) -> Tuple[float, float, float]:
     """
     Extracts the voxel resolution from a v1 or v2 acquisition dict.
     We assume all the dataset was acquired with the same resolution.
@@ -110,9 +112,7 @@ def get_voxel_resolution(acquisition_config: Dict) -> Tuple[float, float, float]
     transforms = imaging_config["images"][0]["image_to_acquisition_transform"]
     scale = [t["scale"] for t in transforms if t.get("object_type") == "Scale"][0]
 
-    resolution = {
-        axis["name"].upper(): float(value) for axis, value in zip(axes, scale)
-    }
+    resolution = {axis["name"].upper(): float(value) for axis, value in zip(axes, scale)}
 
     return resolution["X"], resolution["Y"], resolution["Z"]
 

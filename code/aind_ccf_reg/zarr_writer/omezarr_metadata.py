@@ -60,9 +60,7 @@ def _build_ome(
     Dict: An "omero" metadata object suitable for writing to ome-zarr
     """
     if channel_names is None:
-        channel_names = [
-            f"Channel:{image_name}:{i}" for i in range(data_shape[1])
-        ]
+        channel_names = [f"Channel:{image_name}:{i}" for i in range(data_shape[1])]
     if channel_colors is None:
         channel_colors = [i for i in range(data_shape[1])]
     if channel_minmax is None:
@@ -138,9 +136,7 @@ def _compute_scales(
         ]
     ]
     if translations is not None:
-        transforms[0].append(
-            {"type": "translation", "translation": translations[0]}
-        )
+        transforms[0].append({"type": "translation", "translation": translations[0]})
     chunk_sizes = []
     lastz = data_shape[2]
     lasty = data_shape[3]
@@ -174,9 +170,7 @@ def _compute_scales(
                 ]
             )
             if translations is not None:
-                transforms[-1].append(
-                    {"type": "translation", "translation": translations[i + 1]}
-                )
+                transforms[-1].append({"type": "translation", "translation": translations[i + 1]})
             lastz = int(np.ceil(lastz / scale_factor[0]))
             lasty = int(np.ceil(lasty / scale_factor[1]))
             lastx = int(np.ceil(lastx / scale_factor[2]))
@@ -194,9 +188,7 @@ def _compute_scales(
     return transforms, chunk_sizes
 
 
-def _get_axes_5d(
-    time_unit: str = "millisecond", space_unit: str = "micrometer"
-) -> List[Dict]:
+def _get_axes_5d(time_unit: str = "millisecond", space_unit: str = "micrometer") -> List[Dict]:
     """Generate the list of axes.
 
     Parameters
@@ -377,7 +369,6 @@ def _downscale_origin(
     new_origins = [current_origin.tolist()]
 
     for _ in range(n_levels - 1):
-
         # Calculate the center shift for the new origin
         center_shift = (current_voxel_size * (scale_factors - 1)) / 2
         current_origin += center_shift
@@ -469,9 +460,7 @@ def write_ome_ngff_metadata(
     coordinate_transformations, chunk_opts = _compute_scales(
         n_lvls, scale_factors, voxel_size, chunk_size, arr_shape, origin
     )
-    fmt.validate_coordinate_transformations(
-        len(arr_shape), n_lvls, coordinate_transformations
-    )
+    fmt.validate_coordinate_transformations(len(arr_shape), n_lvls, coordinate_transformations)
     # Setting coordinate transfomations
     datasets = [{"path": str(i)} for i in range(n_lvls)]
     if coordinate_transformations is not None:

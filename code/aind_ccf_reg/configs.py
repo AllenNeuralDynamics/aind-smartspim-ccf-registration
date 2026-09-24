@@ -10,9 +10,8 @@ import dask.array as da
 import numpy as np
 from argschema import ArgSchema
 from argschema.fields import Dict as sch_dict
-from argschema.fields import Int
+from argschema.fields import Int, Str
 from argschema.fields import List as sch_list
-from argschema.fields import Str
 
 PathLike = Union[str, Path]
 ArrayLike = Union[da.core.Array, np.ndarray]
@@ -33,13 +32,9 @@ class RegSchema(ArgSchema):
         }
     )
 
-    input_channel = Str(
-        metadata={"required": True, "description": "Channel to register"}
-    )
+    input_channel = Str(metadata={"required": True, "description": "Channel to register"})
 
-    input_scale = Int(
-        metadata={"required": True, "description": "Zarr scale to start with"}
-    )
+    input_scale = Int(metadata={"required": True, "description": "Zarr scale to start with"})
 
     input_orientation = sch_list(
         cls_or_instance=sch_dict,
@@ -49,13 +44,9 @@ class RegSchema(ArgSchema):
         },
     )
 
-    template_path = Str(
-        metadata={"required": True, "description": "Path to the SPIM template"}
-    )
+    template_path = Str(metadata={"required": True, "description": "Path to the SPIM template"})
 
-    ccf_reference_path = Str(
-        metadata={"required": True, "description": "Path to the CCF template"}
-    )
+    ccf_reference_path = Str(metadata={"required": True, "description": "Path to the CCF template"})
 
     template_to_ccf_transform_path = sch_list(
         cls_or_instance=Str,
@@ -88,9 +79,7 @@ class RegSchema(ArgSchema):
         }
     )
 
-    output_data = Str(
-        metadata={"required": True, "description": "Output file"}
-    )
+    output_data = Str(metadata={"required": True, "description": "Output file"})
 
     results_folder = Str(
         metadata={
@@ -111,13 +100,9 @@ class RegSchema(ArgSchema):
         metadata={"description": "Amazon Bucket or Google Bucket name"},
     )
 
-    code_url = Str(
-        metadata={"required": True, "description": "CCF registration URL"}
-    )
+    code_url = Str(metadata={"required": True, "description": "CCF registration URL"})
 
-    metadata_folder = Str(
-        metadata={"required": True, "description": "Metadata folder"}
-    )
+    metadata_folder = Str(metadata={"required": True, "description": "Metadata folder"})
 
     OMEZarr_params = sch_dict(
         metadata={
