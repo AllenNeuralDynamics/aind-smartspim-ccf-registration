@@ -55,20 +55,11 @@ def register_datasets(path_to_datasets: str):
         Path to the folder where the datasets
         are located
     """
-    # flake8: noqa: W605
-    date_structure = "(20\d{2}-(\d\d{1})-(\d\d{1}))(_|-)((\d{2})-(\d{2})-(\d{2}))"
-
-    smartspim_id = "SmartSPIM_(\d{7}|\d{6})"
-    smartspim_id_regex = "({})".format(smartspim_id)
-
-    smartspim_str = f"{smartspim_id}_{date_structure}_(stitched|processed)_{date_structure}"
-    smartspim_processed_regex = "({})".format(smartspim_str)
-
     datasets = [
         dataset
         for dataset in os.listdir(path_to_datasets)
         if os.path.isdir(f"{path_to_datasets}{dataset}")
-    ]  # re.match(smartspim_processed_regex, dataset)
+    ]
     n_datasets = len(datasets)
     logger.info(f"Datasets: {datasets} - len: {n_datasets}")
 
