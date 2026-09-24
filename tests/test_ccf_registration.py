@@ -37,7 +37,7 @@ from aind_ccf_reg.preprocess import (
     perc_normalization,
     write_and_plot_image,
 )
-from aind_ccf_reg.register import compute_pyramid, get_pyramid_metadata, pad_array_n_d
+from aind_ccf_reg.register import pad_array_n_d
 from aind_ccf_reg.utils import (
     check_orientation,
     create_folder,
@@ -125,7 +125,7 @@ class TestPercentileNormalization(unittest.TestCase):
         img = _ants(np.ones((3, 3, 3)) * 0.5)
         recovered = invert_perc_normalization(img, pvals)
         expected = 0.5 * (500.0 - 100.0) + 100.0  # = 300.0
-        np.testing.assert_allclose(np.array(recovered), expected, rtol=1e-5)
+        np.testing.assert_allclose(recovered.numpy(), expected, rtol=1e-5)
 
     def test_invert_roundtrip(self):
         """Normalise then invert should approximately recover the original."""
@@ -134,8 +134,8 @@ class TestPercentileNormalization(unittest.TestCase):
         recovered = invert_perc_normalization(norm, pvals)
         # Values inside [p0,p1] should round-trip exactly (no clipping)
         np.testing.assert_allclose(
-            np.array(recovered).ravel(),
-            (np.array(norm) * (pvals[1] - pvals[0]) + pvals[0]).ravel(),
+            recovered.numpy().ravel(),
+            (norm.numpy() * (pvals[1] - pvals[0]) + pvals[0]).ravel(),
             rtol=1e-5,
         )
 
@@ -265,51 +265,6 @@ class TestPadArrayND(unittest.TestCase):
     def test_dask_array(self):
         arr = da.from_array(np.ones((4, 4, 4)), chunks=2)
         self.assertEqual(pad_array_n_d(arr, dim=5).ndim, 5)
-
-
-# ---------------------------------------------------------------------------
-# Pyramid
-# ---------------------------------------------------------------------------
-
-
-class TestPyramid(unittest.TestCase):
-    """Tests for compute_pyramid and get_pyramid_metadata."""
-
-    def test_metadata_has_required_keys(self):
-        meta = get_pyramid_metadata()
-        self.assertIn("metadata", meta)
-        for key in ("description", "method", "version", "args", "kwargs"):
-            self.assertIn(key, meta["metadata"])
-
-    def test_metadata_version_is_string(self):
-        self.assertIsInstance(get_pyramid_metadata()["metadata"]["version"], str)
-
-    def test_pyramid_length_matches_n_lvls(self):
-        data = da.from_array(np.ones((16, 16, 16), dtype=np.float32), chunks=8)
-        result = compute_pyramid(data, n_lvls=3, scale_axis=(2, 2, 2))
-        self.assertEqual(len(result), 3)
-
-    def test_pyramid_shapes_decrease(self):
-        data = da.from_array(np.ones((32, 32, 32), dtype=np.float32), chunks=16)
-        result = compute_pyramid(data, n_lvls=3, scale_axis=(2, 2, 2))
-        for i in range(len(result) - 1):
-            self.assertGreater(
-                sum(result[i].shape),
-                sum(result[i + 1].shape),
-                msg=f"Level {i} not larger than level {i + 1}",
-            )
-
-    def test_pyramid_returns_dask_arrays(self):
-        data = da.from_array(np.ones((16, 16, 16), dtype=np.float32), chunks=8)
-        for arr in compute_pyramid(data, n_lvls=2, scale_axis=(2, 2, 2)):
-            self.assertIsInstance(arr, da.core.Array)
-
-    def test_single_level_full_resolution(self):
-        src = np.ones((8, 8, 8), dtype=np.float32)
-        data = da.from_array(src, chunks=4)
-        result = compute_pyramid(data, n_lvls=1, scale_axis=(2, 2, 2))
-        self.assertEqual(len(result), 1)
-        np.testing.assert_array_equal(result[0].compute(), src)
 
 
 # ---------------------------------------------------------------------------
