@@ -68,7 +68,7 @@ fail_under = 40
 
 [tool.ruff]
 line-length = 100
-extend-exclude = ["*.ipynb", ".venv", "*.egg-info", "build", "dist"]
+extend-exclude = ["*.ipynb", ".venv", "*.egg-info", "build", "dist", "doc_template"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "W"]
@@ -80,6 +80,8 @@ ignore = ["E501"]
 "**/__init__.py" = ["F401"]
 # blosc.use_threads must be set before these imports execute.
 "code/aind_ccf_reg/register.py" = ["E402"]
+# Stubs aind_data_schema into sys.modules before importing aind_ccf_reg.
+"tests/*" = ["E402"]
 
 [tool.interrogate]
 exclude = ["setup.py", "docs", "build"]

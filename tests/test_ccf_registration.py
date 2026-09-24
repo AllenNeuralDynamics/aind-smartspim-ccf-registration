@@ -31,14 +31,22 @@ for _mod in [
 # ─────────────────────────────────────────────────────────────────────────────
 
 import ants
-from aind_ccf_reg.preprocess import (Masking, invert_perc_normalization,
-                                     perc_normalization, write_and_plot_image)
-from aind_ccf_reg.register import (compute_pyramid, get_pyramid_metadata,
-                                   pad_array_n_d)
-from aind_ccf_reg.utils import (check_orientation, create_folder,
-                                get_channel_translations, get_size,
-                                read_json_as_dict, rotate_image,
-                                save_dict_as_json)
+from aind_ccf_reg.preprocess import (
+    Masking,
+    invert_perc_normalization,
+    perc_normalization,
+    write_and_plot_image,
+)
+from aind_ccf_reg.register import compute_pyramid, get_pyramid_metadata, pad_array_n_d
+from aind_ccf_reg.utils import (
+    check_orientation,
+    create_folder,
+    get_channel_translations,
+    get_size,
+    read_json_as_dict,
+    rotate_image,
+    save_dict_as_json,
+)
 from skimage.measure import label
 
 # ── Optional: functions from main.py (not part of the installed package) ─────
@@ -97,13 +105,9 @@ class TestPercentileNormalization(unittest.TestCase):
     def test_only_nonzero_voxels_used(self):
         """Percentiles computed from non-zero voxels only."""
         arr = np.zeros((10, 10, 10), dtype=np.float32)
-        arr[5:, 5:, 5:] = np.random.uniform(0.5, 1.0, (5, 5, 5)).astype(
-            np.float32
-        )
+        arr[5:, 5:, 5:] = np.random.uniform(0.5, 1.0, (5, 5, 5)).astype(np.float32)
         _, pvals = perc_normalization(_ants(arr))
-        self.assertGreaterEqual(
-            pvals[0], 0.4
-        )  # must be in the non-zero region
+        self.assertGreaterEqual(pvals[0], 0.4)  # must be in the non-zero region
 
     def test_custom_percentile_range(self):
         """Narrower percentile window produces a smaller [p0, p1] range."""
@@ -145,9 +149,7 @@ class TestWriteAndPlotImage(unittest.TestCase):
     """Tests for write_and_plot_image."""
 
     def test_no_paths_returns_none(self):
-        result = write_and_plot_image(
-            np.random.rand(5, 5, 5).astype(np.float32)
-        )
+        result = write_and_plot_image(np.random.rand(5, 5, 5).astype(np.float32))
         self.assertIsNone(result)
 
     def test_writes_nifti_to_disk(self):
@@ -199,12 +201,8 @@ class TestMasking(unittest.TestCase):
         arr[10:16, 10:16, 10:16] = 1  # large: 6³ = 216 voxels
         masking = Masking(_ants(np.zeros((20, 20, 20))))
         result = masking._getLargestCC(arr)
-        self.assertEqual(
-            result[1, 1, 1], 0, "small component should be removed"
-        )
-        self.assertEqual(
-            result[13, 13, 13], 1, "large component should remain"
-        )
+        self.assertEqual(result[1, 1, 1], 0, "small component should be removed")
+        self.assertEqual(result[13, 13, 13], 1, "large component should remain")
 
     def test_get_largest_cc_single_component(self):
         arr = np.zeros((10, 10, 10), dtype=int)
@@ -284,9 +282,7 @@ class TestPyramid(unittest.TestCase):
             self.assertIn(key, meta["metadata"])
 
     def test_metadata_version_is_string(self):
-        self.assertIsInstance(
-            get_pyramid_metadata()["metadata"]["version"], str
-        )
+        self.assertIsInstance(get_pyramid_metadata()["metadata"]["version"], str)
 
     def test_pyramid_length_matches_n_lvls(self):
         data = da.from_array(np.ones((16, 16, 16), dtype=np.float32), chunks=8)
@@ -294,15 +290,13 @@ class TestPyramid(unittest.TestCase):
         self.assertEqual(len(result), 3)
 
     def test_pyramid_shapes_decrease(self):
-        data = da.from_array(
-            np.ones((32, 32, 32), dtype=np.float32), chunks=16
-        )
+        data = da.from_array(np.ones((32, 32, 32), dtype=np.float32), chunks=16)
         result = compute_pyramid(data, n_lvls=3, scale_axis=(2, 2, 2))
         for i in range(len(result) - 1):
             self.assertGreater(
                 sum(result[i].shape),
                 sum(result[i + 1].shape),
-                msg=f"Level {i} not larger than level {i+1}",
+                msg=f"Level {i} not larger than level {i + 1}",
             )
 
     def test_pyramid_returns_dask_arrays(self):
@@ -330,9 +324,7 @@ class TestUtils(unittest.TestCase):
 
     def test_read_json_returns_dict(self):
         data = {"a": 1, "b": [2, 3], "c": {"nested": True}}
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".json", delete=False
-        ) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
             json.dump(data, f)
             path = f.name
         try:
@@ -492,31 +484,23 @@ class TestCheckOrientation(unittest.TestCase):
 
     def test_returns_three_values(self):
         img = np.zeros((10, 20, 30))
-        result = check_orientation(
-            img, self._aligned_params(), self._ORIENTATIONS
-        )
+        result = check_orientation(img, self._aligned_params(), self._ORIENTATIONS)
         self.assertEqual(len(result), 3)
 
     def test_orient_mat_is_3x3(self):
         img = np.zeros((10, 20, 30))
-        _, orient_mat, _ = check_orientation(
-            img, self._aligned_params(), self._ORIENTATIONS
-        )
+        _, orient_mat, _ = check_orientation(img, self._aligned_params(), self._ORIENTATIONS)
         self.assertEqual(orient_mat.shape, (3, 3))
 
     def test_output_image_is_3d(self):
         img = np.zeros((10, 20, 30))
-        img_out, _, _ = check_orientation(
-            img, self._aligned_params(), self._ORIENTATIONS
-        )
+        img_out, _, _ = check_orientation(img, self._aligned_params(), self._ORIENTATIONS)
         self.assertEqual(img_out.ndim, 3)
 
     def test_already_aligned_preserves_shape(self):
         """When acquisition matches the target orientation the shape is unchanged."""
         img = np.zeros((10, 20, 30))
-        img_out, _, _ = check_orientation(
-            img, self._aligned_params(), self._ORIENTATIONS
-        )
+        img_out, _, _ = check_orientation(img, self._aligned_params(), self._ORIENTATIONS)
         self.assertEqual(img_out.shape, img.shape)
 
     def test_flipped_direction_handled(self):
@@ -549,20 +533,14 @@ class TestGetEstimatedDownsample(unittest.TestCase):
 
     def test_docstring_example(self):
         """voxel (1.8,1.8,2.0) vs registration (3.6,3.6,4.0) → level 1."""
-        self.assertEqual(
-            get_estimated_downsample([1.8, 1.8, 2.0], (3.6, 3.6, 4.0)), 1
-        )
+        self.assertEqual(get_estimated_downsample([1.8, 1.8, 2.0], (3.6, 3.6, 4.0)), 1)
 
     def test_double_downsample(self):
         """voxel (0.9,0.9,1.0) vs registration (3.6,3.6,4.0) → level 2."""
-        self.assertEqual(
-            get_estimated_downsample([0.9, 0.9, 1.0], (3.6, 3.6, 4.0)), 2
-        )
+        self.assertEqual(get_estimated_downsample([0.9, 0.9, 1.0], (3.6, 3.6, 4.0)), 2)
 
     def test_equal_resolutions_gives_zero(self):
-        self.assertEqual(
-            get_estimated_downsample([16.0, 14.4, 14.4], (16.0, 14.4, 14.4)), 0
-        )
+        self.assertEqual(get_estimated_downsample([16.0, 14.4, 14.4], (16.0, 14.4, 14.4)), 0)
 
     def test_returns_int(self):
         self.assertIsInstance(get_estimated_downsample([1.8, 1.8, 2.0]), int)
@@ -570,9 +548,7 @@ class TestGetEstimatedDownsample(unittest.TestCase):
     def test_uses_minimum_axis_ratio(self):
         """Should pick the smallest ratio across axes (most conservative level)."""
         # axis 0: 4x, axes 1&2: 2x → min=2 → level 1
-        self.assertEqual(
-            get_estimated_downsample([1.0, 2.0, 2.0], (4.0, 4.0, 4.0)), 1
-        )
+        self.assertEqual(get_estimated_downsample([1.0, 2.0, 2.0], (4.0, 4.0, 4.0)), 1)
 
     def test_default_registration_res(self):
         """Function should work with the default registration_res."""
