@@ -8,7 +8,7 @@ import sys
 import tempfile
 import time
 import unittest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import dask.array as da
 import numpy as np
@@ -37,7 +37,7 @@ from aind_ccf_reg.preprocess import (
     perc_normalization,
     write_and_plot_image,
 )
-from aind_ccf_reg.register import pad_array_n_d
+from aind_ccf_reg.register import Register, pad_array_n_d
 from aind_ccf_reg.utils import (
     check_orientation,
     create_folder,
@@ -530,6 +530,54 @@ class TestResourceMonitor(unittest.TestCase):
         usage = monitor.to_resource_usage(cpu_cores=2)
         self.assertIsInstance(usage, ResourceUsage)
         self.assertGreater(len(usage.cpu_usage), 0)
+
+
+class TestWriteZarrChunkParams(unittest.TestCase):
+    """Tests for the optional shard/chunk/scale parameters of write_zarr."""
+
+    def _make_register(self):
+        """Build a Register instance without running ArgSchemaParser.__init__."""
+        reg = Register.__new__(Register)
+        reg.args = {
+            "OMEZarr_params": {"n_lvls": 1},
+            "input_channel": "Ex_488_Em_561",
+        }
+        return reg
+
+    @patch("aind_ccf_reg.register.zarr_writer")
+    def test_defaults_used_when_none(self, mock_zarr_writer):
+        """Omitting the params falls back to the documented defaults."""
+        reg = self._make_register()
+        reg.write_zarr(
+            img_array=np.ones((4, 4, 4), dtype=np.float32),
+            physical_pixel_sizes=[1.0, 1.0, 1.0],
+            output_path="/tmp/out",
+            image_name="image.zarr",
+            opts={},
+        )
+        kwargs = mock_zarr_writer.call_args.kwargs
+        self.assertEqual(kwargs["shard_size"], [512, 512, 512])
+        self.assertEqual(kwargs["chunk_size"], [128, 128, 128])
+        self.assertEqual(kwargs["scale_factor"], [2, 2, 2])
+
+    @patch("aind_ccf_reg.register.zarr_writer")
+    def test_custom_values_forwarded(self, mock_zarr_writer):
+        """Custom tuples are forwarded to zarr_writer as lists."""
+        reg = self._make_register()
+        reg.write_zarr(
+            img_array=np.ones((4, 4, 4), dtype=np.float32),
+            physical_pixel_sizes=[1.0, 1.0, 1.0],
+            output_path="/tmp/out",
+            image_name="image.zarr",
+            opts={},
+            shard_size=(256, 256, 256),
+            chunk_size=(64, 64, 64),
+            scale_factor=(3, 3, 3),
+        )
+        kwargs = mock_zarr_writer.call_args.kwargs
+        self.assertEqual(kwargs["shard_size"], [256, 256, 256])
+        self.assertEqual(kwargs["chunk_size"], [64, 64, 64])
+        self.assertEqual(kwargs["scale_factor"], [3, 3, 3])
 
 
 if __name__ == "__main__":

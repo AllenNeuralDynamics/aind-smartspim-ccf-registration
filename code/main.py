@@ -371,6 +371,9 @@ def main() -> None:
                     "compressor": "zstd",
                     "chunks": (64, 64, 64),
                     "n_lvls": 4,
+                    "shard_size": (512, 512, 512),
+                    "chunk_size": (128, 128, 128),
+                    "scale_factor": (2, 2, 2),
                 },
                 "ng_params": {
                     "save_path": precompute_path,

@@ -14,7 +14,7 @@ import logging
 import os
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 import ants
 import dask.array as da
@@ -802,6 +802,9 @@ class Register(ArgSchemaParser):
         output_path: PathLike,
         image_name: PathLike,
         opts: dict,
+        shard_size: Optional[Tuple[int, int, int]] = None,
+        chunk_size: Optional[Tuple[int, int, int]] = None,
+        scale_factor: Optional[Tuple[int, int, int]] = None,
     ):
         """
         Writes array to the OMEZarr format
@@ -824,7 +827,28 @@ class Register(ArgSchemaParser):
         opts: dict
             Dictionary with the storage
             options for the zarr image
+
+        shard_size: Optional[Tuple[int, int, int]]
+            Shard size per axis (ZYX) for the OMEZarr writer.
+            Defaults to (512, 512, 512) when None.
+
+        chunk_size: Optional[Tuple[int, int, int]]
+            Chunk size per axis (ZYX) for the OMEZarr writer.
+            Defaults to (128, 128, 128) when None.
+
+        scale_factor: Optional[Tuple[int, int, int]]
+            Downsampling factor per axis (ZYX) for the
+            multiresolution pyramid. Defaults to (2, 2, 2) when None.
         """
+
+        if shard_size is None:
+            shard_size = (512, 512, 512)
+
+        if chunk_size is None:
+            chunk_size = (128, 128, 128)
+
+        if scale_factor is None:
+            scale_factor = (2, 2, 2)
 
         # Padding to 5D if necessary
         img_array = pad_array_n_d(img_array)
@@ -837,9 +861,9 @@ class Register(ArgSchemaParser):
             image_data=img_array,
             output_path=output_path,
             voxel_size=physical_pixel_sizes,
-            shard_size=[512, 512, 512],
-            chunk_size=[128, 128, 128],
-            scale_factor=[2, 2, 2],
+            shard_size=list(shard_size),
+            chunk_size=list(chunk_size),
+            scale_factor=list(scale_factor),
             n_lvls=self.args["OMEZarr_params"]["n_lvls"],
             channel_name=self.args["input_channel"],
             logger=logger,
@@ -988,6 +1012,9 @@ class Register(ArgSchemaParser):
             output_path=output_data_path,
             image_name=image_name,
             opts=opts,
+            shard_size=self.args["OMEZarr_params"].get("shard_size"),
+            chunk_size=self.args["OMEZarr_params"].get("chunk_size"),
+            scale_factor=self.args["OMEZarr_params"].get("scale_factor"),
         )
         resource_monitor.stop()
         end_date_time = datetime.now(timezone.utc)
@@ -1104,6 +1131,9 @@ class Register(ArgSchemaParser):
                 output_path=output_data_path,
                 image_name=image_name,
                 opts=opts,
+                shard_size=self.args["OMEZarr_params"].get("shard_size"),
+                chunk_size=self.args["OMEZarr_params"].get("chunk_size"),
+                scale_factor=self.args["OMEZarr_params"].get("scale_factor"),
             )
             resource_monitor.stop()
             end_date_time = datetime.now(timezone.utc)
