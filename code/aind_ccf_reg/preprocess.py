@@ -9,10 +9,11 @@ from typing import Optional
 import ants
 import numpy as np
 import scipy.ndimage as ni
-from aind_ccf_reg.configs import VMAX, VMIN
-from aind_ccf_reg.plots import plot_antsimgs
 from skimage.filters import threshold_li
 from skimage.measure import label
+
+from aind_ccf_reg.configs import VMAX, VMIN
+from aind_ccf_reg.plots import plot_antsimgs
 
 LOG_FMT = "%(asctime)s %(message)s"
 LOG_DATE_FMT = "%Y-%m-%d %H:%M"
@@ -40,9 +41,7 @@ def invert_perc_normalization(ants_img, percentile_values):
     return new_img
 
 
-def perc_normalization(
-    ants_img, lower_perc: float = 2, upper_perc: float = 98
-):
+def perc_normalization(ants_img, lower_perc: float = 2, upper_perc: float = 98):
     """
     Percentile Normalization
 
@@ -61,20 +60,21 @@ def perc_normalization(
     arr = ants_img.view()
     nonzero_vals = arr[arr > 0]
     percentile_values = np.percentile(nonzero_vals, percentiles)
-    assert percentile_values[1] > percentile_values[0]
+    if not percentile_values[1] > percentile_values[0]:
+        raise ValueError(
+            f"Upper percentile ({percentile_values[1]}) must be greater than "
+            f"lower percentile ({percentile_values[0]}). "
+            "The image may have insufficient non-zero voxels."
+        )
 
     ants_img = np.maximum(ants_img, percentile_values[0])
 
-    ants_img = (ants_img - percentile_values[0]) / (
-        percentile_values[1] - percentile_values[0]
-    )
+    ants_img = (ants_img - percentile_values[0]) / (percentile_values[1] - percentile_values[0])
 
     return ants_img, percentile_values
 
 
-def write_and_plot_image(
-    ants_img, data_path=None, plot_path=None, vmin=VMIN, vmax=VMAX
-):
+def write_and_plot_image(ants_img, data_path=None, plot_path=None, vmin=VMIN, vmax=VMAX):
     """
     Write and plot an ANTsImage
 
@@ -116,10 +116,7 @@ class Masking:
         """get the largest connected component"""
         labels = label(segmentation)
         if labels.max() == 0:
-            logger.warning(
-                "No connected components found in mask,"
-                "returning input unchanged."
-            )
+            logger.warning("No connected components found in mask,returning input unchanged.")
             return segmentation
         largestCC = labels == np.argmax(np.bincount(labels.flat)[1:]) + 1
 
@@ -164,9 +161,7 @@ class Masking:
                 arr_img[arr_img > low_intensity_threshold],
                 low_percentile_threshold,
             )
-            logger.info(
-                f"Using low percentile threshold instead: {low_thresh}\n"
-            )
+            logger.info(f"Using low percentile threshold instead: {low_thresh}\n")
 
         logger.info(
             f"Find optimal threshold using Li thresholding, execution time:\
@@ -192,9 +187,7 @@ class Masking:
         mask = ni.binary_closing(mask).astype(int)
         mask = self._getLargestCC(mask)
 
-        mask = ni.binary_dilation(mask, structure=struct, iterations=6).astype(
-            int
-        )
+        mask = ni.binary_dilation(mask, structure=struct, iterations=6).astype(int)
         arr_mask = ni.binary_fill_holes(mask).astype(int)
 
         return arr_mask
@@ -214,8 +207,7 @@ class Masking:
         # (handles edge cases where threshold equals the max image value)
         if not arr_mask.any() and (arr_img > 0).any():
             logger.warning(
-                f"Threshold {low_thresh} produced an empty mask. "
-                "Retrying with >= comparison."
+                f"Threshold {low_thresh} produced an empty mask. Retrying with >= comparison."
             )
             arr_mask = arr_img >= low_thresh
 
@@ -259,9 +251,7 @@ class Preprocess:
     def resample(self, ants_img, ants_template):
         """Resample OMEZarr image to the resolution of template"""
         logger.info("Resample OMEZarr image to the resolution of template")
-        ants_img = ants.resample_image(
-            ants_img, ants_template.spacing, False, 1
-        )
+        ants_img = ants.resample_image(ants_img, ants_template.spacing, False, 1)
 
         logger.info(f"Resampled OMEZarr dataset: {ants_img}")
 
@@ -284,8 +274,10 @@ class Preprocess:
         ants_img_mask = mask.run()
         end_time = datetime.now()
 
-        logger.info(f"Mask Complete, execution time: {end_time - start_time} s\
-            -- image {ants_img_mask}")
+        logger.info(
+            f"Mask Complete, execution time: {end_time - start_time} s\
+            -- image {ants_img_mask}"
+        )
 
         write_and_plot_image(
             ants_img_mask,
@@ -310,7 +302,7 @@ class Preprocess:
         weight_mask=None,
     ):
         """N4 Bias Field Correction
-        https://antspy.readthedocs.io/en/latest/utils.html#ants.utils.bias_correction.n4_bias_field_correction
+        https://antspy.readthedocs.io/en/latest/utils.html#ants.n4_bias_field_correction
         """
         logger.info("Computing N4")
         n4_bias_params = {
@@ -326,13 +318,13 @@ class Preprocess:
 
         logger.info(f"Parameters -> {n4_bias_params}")
         start_time = datetime.now()
-        ants_img_n4 = ants.utils.n4_bias_field_correction(
-            ants_img, **n4_bias_params
-        )
+        ants_img_n4 = ants.n4_bias_field_correction(ants_img, **n4_bias_params)
         end_time = datetime.now()
 
-        logger.info(f"N4 Complete, execution time: {end_time - start_time} s\
-            -- image {ants_img_n4}")
+        logger.info(
+            f"N4 Complete, execution time: {end_time - start_time} s\
+            -- image {ants_img_n4}"
+        )
 
         write_and_plot_image(
             ants_img_n4,
@@ -361,8 +353,10 @@ class Preprocess:
         start_time = datetime.now()
         ants_img, percentile_values = perc_normalization(ants_img)
         end_time = datetime.now()
-        logger.info(f"Intensity normalization complete, execution time:\
-            {end_time - start_time} s -- image {ants_img}")
+        logger.info(
+            f"Intensity normalization complete, execution time:\
+            {end_time - start_time} s -- image {ants_img}"
+        )
 
         write_and_plot_image(
             ants_img,
@@ -391,20 +385,9 @@ class Preprocess:
         ants_img, percentile_values = self.intensity_norm(ants_img)
 
         end_date_time = datetime.now()
-        logger.info(f"Preprocessing complete, execution time:\
-            {end_date_time - start_date_time} s")
+        logger.info(
+            f"Preprocessing complete, execution time:\
+            {end_date_time - start_date_time} s"
+        )
 
         return ants_img, percentile_values
-
-
-def main(input_config: dict):
-    """
-    Main function to execute
-    """
-
-    mod = Preprocess(input_config)
-    return mod.run()
-
-
-if __name__ == "__main__":
-    main()

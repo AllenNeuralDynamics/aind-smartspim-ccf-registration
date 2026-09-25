@@ -1,6 +1,6 @@
 """CCF Registration package."""
 
-__version__ = "0.0.36"
+__version__ = "0.0.37"
 
 __authors__ = [
     "Camilo Laiton",
@@ -21,9 +21,7 @@ __description__ = (
     "Repository for aligning brains captures with "
     "the SmartSPIM lightsheet microscope to the Allen CCF V3."
 )
-__url__ = (
-    "https://github.com/AllenNeuralDynamics/aind-smartspim-ccf-registration"
-)
+__url__ = "https://github.com/AllenNeuralDynamics/aind-smartspim-ccf-registration"
 
 __maintainers__ = [
     "Camilo Laiton",
@@ -38,4 +36,5 @@ __maintainer_emails__ = [
 ]
 __title__ = "aind-smartspim-ccf-registration"
 __status__ = "Production"  # 'Development' 'Production', 'Beta'
-__pipeline_version__ = "5.0.0"
+__pipeline_version__ = "6.0.0"
+__pipeline_name__ = "SmartSPIM Pipeline"

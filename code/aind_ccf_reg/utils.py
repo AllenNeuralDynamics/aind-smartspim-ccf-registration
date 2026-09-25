@@ -2,65 +2,35 @@
 File for utilities
 """
 
+from __future__ import annotations
+
 import json
 import logging
 import multiprocessing
 import os
 import platform
+import threading
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from glob import glob
-from pathlib import Path
-from typing import List, Optional, Union
+from typing import List, Optional
 
 import matplotlib.pyplot as plt
 import numpy as np
 import psutil
 import pydantic
 import scipy.ndimage as ndi
-from aind_ccf_reg.configs import PathLike
-from aind_data_schema.core.processing import (DataProcess, PipelineProcess,
-                                              Processing)
+from aind_data_schema.components.identifiers import Code
+from aind_data_schema.core.processing import (
+    DataProcess,
+    Processing,
+    ResourceTimestamped,
+    ResourceUsage,
+)
+from aind_data_schema_models.units import MemoryUnit
 from cloudvolume import CloudVolume
 
-
-def create_logger(output_log_path: PathLike) -> logging.Logger:
-    """
-    Creates a logger that generates output logs to a specific path.
-
-    Parameters
-    ------------
-    output_log_path: PathLike
-        Path where the log is going to be stored
-
-    Returns
-    -----------
-    logging.Logger
-        Created logger
-        pointing to the file path.
-    """
-    CURR_DATE_TIME = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
-
-    LOGS_FILE = f"{output_log_path}/register_process.log"
-
-    logging.basicConfig(
-        level=logging.DEBUG,
-        format="%(asctime)s - %(levelname)s : %(message)s",
-        datefmt="%Y-%m-%d %H:%M",
-        handlers=[
-            logging.StreamHandler(),
-            logging.FileHandler(LOGS_FILE, "a"),
-        ],
-        force=True,
-    )
-
-    #     logging.disable("DEBUG")
-    logging.disable(logging.DEBUG)
-    logger = logging.getLogger(__name__)
-    logger.setLevel(logging.DEBUG)
-    logger.info(f"Execution datetime: {CURR_DATE_TIME}")
-
-    return logger
+from aind_ccf_reg.configs import PathLike
 
 
 def read_json_as_dict(filepath: str) -> dict:
@@ -90,6 +60,21 @@ def read_json_as_dict(filepath: str) -> dict:
     return dictionary
 
 
+def save_dict_as_json(filename: str, dictionary: dict) -> None:
+    """
+    Saves a dictionary as a JSON file.
+
+    Parameters
+    ------------------------
+    filename: str
+        Path where the JSON file will be written.
+    dictionary: dict
+        Dictionary to serialize.
+    """
+    with open(filename, "w") as json_file:
+        json.dump(dictionary, json_file, indent=2)
+
+
 def create_folder(dest_dir: PathLike, verbose: Optional[bool] = False) -> None:
     """
     Create new folders.
@@ -115,9 +100,7 @@ def create_folder(dest_dir: PathLike, verbose: Optional[bool] = False) -> None:
                 raise
 
 
-def read_json_from_pydantic(
-    path: PathLike, pydantic_class
-) -> pydantic.BaseModel:
+def read_json_from_pydantic(path: PathLike, pydantic_class) -> pydantic.BaseModel:
     """
     Reads a json file and parses it to
     a pydantic model
@@ -180,45 +163,121 @@ def get_channel_translations(
 def generate_processing(
     data_processes: List[DataProcess],
     dest_processing: PathLike,
-    processor_full_name: str,
+    pipeline_name: str,
     pipeline_version: str,
-):
+    pipeline_url: str,
+) -> None:
     """
-    Generates data description for the output folder.
+    Generates the processing.json metadata for the output folder.
 
     Parameters
     ------------------------
 
-    data_processes: List[dict]
-        List with the processes aplied in the pipeline.
+    data_processes: List[DataProcess]
+        List with the processes applied in the pipeline.
 
     dest_processing: PathLike
-        Path where the processing file will be placed.
+        Directory where the processing.json file will be placed.
 
-    processor_full_name: str
-        Person in charged of running the pipeline
-        for this data asset
+    pipeline_name: str
+        Name of the pipeline. Must match the ``pipeline_name`` set on each
+        ``DataProcess`` for graph validation.
 
     pipeline_version: str
-        Terastitcher pipeline version
+        Version of the pipeline.
+
+    pipeline_url: str
+        URL of the pipeline repository.
 
     """
-    # flake8: noqa: E501
-    processing_pipeline = PipelineProcess(
-        data_processes=data_processes,
-        processor_full_name=processor_full_name,
-        pipeline_version=pipeline_version,
-        pipeline_url="https://github.com/AllenNeuralDynamics/aind-smartspim-pipeline",
-        note="Metadata for the CCF Atlas Registration step",
-    )
 
-    processing = Processing(
-        processing_pipeline=processing_pipeline,
-        notes="This processing only contains metadata of ccf registration \
-            and needs to be compiled with other steps at the end",
+    pipelines = [Code(url=pipeline_url, name=pipeline_name, version=pipeline_version)]
+    processing = Processing.create_with_sequential_process_graph(
+        data_processes=data_processes,
+        pipelines=pipelines,
+        notes="Metadata for the CCF Atlas Registration step. This processing "
+        "only contains metadata of ccf registration and needs to be "
+        "compiled with other steps at the end.",
     )
 
     processing.write_standard_file(output_directory=dest_processing)
+
+
+class ResourceMonitor:
+    """
+    Background sampler for CPU and RAM usage during a processing step.
+
+    Samples ``psutil`` at a fixed interval on a daemon thread and converts
+    the collected samples into an ``aind_data_schema`` ``ResourceUsage``.
+    """
+
+    def __init__(self, interval_seconds: Optional[float] = 1.0):
+        """
+        Parameters
+        ----------
+        interval_seconds: Optional[float]
+            Sampling interval in seconds. Default 1.0.
+        """
+        self._interval = interval_seconds
+        self._cpu_usage: List[ResourceTimestamped] = []
+        self._ram_usage: List[ResourceTimestamped] = []
+        self._stop_event = threading.Event()
+        self._thread = threading.Thread(target=self._run, daemon=True)
+
+    def _run(self) -> None:
+        """Sampling loop running on the daemon thread."""
+        while not self._stop_event.is_set():
+            now = datetime.now(timezone.utc)
+            self._cpu_usage.append(
+                ResourceTimestamped(timestamp=now, usage=psutil.cpu_percent(interval=None))
+            )
+            self._ram_usage.append(
+                ResourceTimestamped(timestamp=now, usage=psutil.virtual_memory().percent)
+            )
+            self._stop_event.wait(self._interval)
+
+    def start(self) -> "ResourceMonitor":
+        """Prime the CPU sampler and start the monitoring thread."""
+        psutil.cpu_percent(interval=None)  # prime the first sample
+        self._thread.start()
+        return self
+
+    def stop(self) -> None:
+        """Signal the monitoring thread to stop and join it."""
+        self._stop_event.set()
+        self._thread.join(timeout=self._interval + 1)
+
+    def __enter__(self) -> "ResourceMonitor":
+        """Start monitoring and return self for use as a context manager."""
+        return self.start()
+
+    def __exit__(self, *exc_info) -> None:
+        """Stop monitoring when exiting the context manager."""
+        self.stop()
+
+    def to_resource_usage(self, cpu_cores: Optional[int] = None) -> ResourceUsage:
+        """
+        Builds a ``ResourceUsage`` from the collected samples.
+
+        Parameters
+        ----------
+        cpu_cores: Optional[int]
+            Number of CPU cores allocated to the job.
+
+        Returns
+        -------
+        ResourceUsage
+        """
+        return ResourceUsage(
+            os=platform.system(),
+            architecture=platform.machine(),
+            cpu_cores=cpu_cores,
+            system_memory=round(psutil.virtual_memory().total / (1024**3), 2),
+            system_memory_unit=MemoryUnit.GB,
+            cpu_usage=self._cpu_usage,
+            ram_usage=self._ram_usage,
+            ram_unit=MemoryUnit.GB,
+        )
 
 
 def rotate_image(img: np.array, in_mat: np.array, reverse: bool):
@@ -385,28 +444,18 @@ class create_precomputed:
             scale = {
                 "chunk_sizes": [self.scaling["chunk_size"]],
                 "encoding": self.scaling["encoding"],
-                "compressed_segmentation_block_size": self.scaling[
-                    "compressed_block"
-                ],
+                "compressed_segmentation_block_size": self.scaling["compressed_block"],
                 "key": "_".join(
                     [
                         str(int(r * f**s))
-                        for r, f in zip(
-                            self.scaling["res"], self.scaling["factors"]
-                        )
+                        for r, f in zip(self.scaling["res"], self.scaling["factors"])
                     ]
                 ),
                 "resolution": [
-                    int(r * f**s)
-                    for r, f in zip(
-                        self.scaling["res"], self.scaling["factors"]
-                    )
+                    int(r * f**s) for r, f in zip(self.scaling["res"], self.scaling["factors"])
                 ],
                 "size": [
-                    int(d // f**s)
-                    for d, f in zip(
-                        self.scaling["dims"], self.scaling["factors"]
-                    )
+                    int(d // f**s) for d, f in zip(self.scaling["dims"], self.scaling["factors"])
                 ],
             }
             scales.append(scale)
@@ -451,8 +500,7 @@ class create_precomputed:
             data_type="uint32",
             encoding=self.scaling["encoding"],
             resolution=[
-                int(r * f**scale)
-                for r, f in zip(self.scaling["res"], self.scaling["factors"])
+                int(r * f**scale) for r, f in zip(self.scaling["res"], self.scaling["factors"])
             ],
             voxel_offset=[0, 0, 0],
             chunk_size=self.scaling["chunk_size"],
@@ -479,9 +527,7 @@ class create_precomputed:
                 curr_img = ndi.zoom(img, tuple(factor), order=0)
 
             info = self.volume_info(scale, curr_img.shape)
-            vol = CloudVolume(
-                f"file://{self.save_path}", info=info, compress=False
-            )
+            vol = CloudVolume(f"file://{self.save_path}", info=info, compress=False)
             vol[:, :, :] = curr_img.astype("uint32")
 
         return
@@ -583,9 +629,7 @@ def generate_resources_graphs(
     plt.figure(figsize=(10, 6))
 
     plt.subplot(2, 1, 1)
-    plt.plot(
-        time_points[:min_len], cpu_percentages[:min_len], label="CPU Usage"
-    )
+    plt.plot(time_points[:min_len], cpu_percentages[:min_len], label="CPU Usage")
     plt.xlabel("Time (s)")
     plt.ylabel("CPU Usage (%)")
     plt.title("CPU Usage Over Time")
@@ -593,9 +637,7 @@ def generate_resources_graphs(
     plt.legend()
 
     plt.subplot(2, 1, 2)
-    plt.plot(
-        time_points[:min_len], memory_usages[:min_len], label="Memory Usage"
-    )
+    plt.plot(time_points[:min_len], memory_usages[:min_len], label="Memory Usage")
     plt.xlabel("Time (s)")
     plt.ylabel("Memory Usage (%)")
     plt.title("Memory Usage Over Time")
@@ -603,9 +645,7 @@ def generate_resources_graphs(
     plt.legend()
 
     plt.tight_layout()
-    plt.savefig(
-        f"{output_path}/{prefix}_compute_resources.png", bbox_inches="tight"
-    )
+    plt.savefig(f"{output_path}/{prefix}_compute_resources.png", bbox_inches="tight")
 
 
 def stop_child_process(process: multiprocessing.Process):
@@ -677,15 +717,54 @@ def get_cpu_limit():
 
         container_cpus = cfs_quota_us // cfs_period_us
 
-    except FileNotFoundError as e:
+    except FileNotFoundError:
         container_cpus = 0
 
     # For physical machine, the `cfs_quota_us` could be '-1'
-    return (
-        psutil.cpu_count(logical=False)
-        if container_cpus < 1
-        else container_cpus
-    )
+    return psutil.cpu_count(logical=False) if container_cpus < 1 else container_cpus
+
+
+def _memory_from_co_env() -> Optional[int]:
+    """Return memory bytes from CO_MEMORY env var (GB), or None."""
+    memory_env = os.environ.get("CO_MEMORY")
+    if memory_env:
+        try:
+            return int(memory_env)
+        except ValueError:
+            pass
+    return None
+
+
+def _memory_from_cgroup() -> Optional[int]:
+    """Return memory bytes from cgroup limit file, or None."""
+    cgroup_path = "/sys/fs/cgroup/memory/memory.limit_in_bytes"
+    try:
+        with open(cgroup_path, "r") as f:
+            mem_bytes = int(f.read().strip())
+            if mem_bytes < 1 << 50:
+                return mem_bytes
+    except FileNotFoundError:
+        pass
+    return None
+
+
+def _memory_from_slurm() -> Optional[int]:
+    """Return memory bytes from SLURM env vars, or None."""
+    mem_per_node = os.environ.get("SLURM_MEM_PER_NODE")
+    if mem_per_node:
+        try:
+            return int(mem_per_node) * 1024**2
+        except ValueError:
+            pass
+
+    mem_per_cpu = os.environ.get("SLURM_MEM_PER_CPU")
+    cpus = os.environ.get("SLURM_JOB_CPUS_PER_NODE")
+    if mem_per_cpu and cpus:
+        try:
+            return int(mem_per_cpu) * int(cpus) * 1024**2
+        except ValueError:
+            pass
+    return None
 
 
 def get_memory_limit_bytes():
@@ -697,42 +776,11 @@ def get_memory_limit_bytes():
     3. SLURM environment variables
     4. psutil system memory (total)
     """
-    # 1. CO_MEMORY (in GB)
-    memory_env = os.environ.get("CO_MEMORY")
-    if memory_env:
-        try:
-            return int(memory_env)  # Convert GB → bytes
-        except ValueError:
-            pass  # Invalid format, fallback
-
-    # 2. cgroup memory limit (in bytes)
-    cgroup_path = "/sys/fs/cgroup/memory/memory.limit_in_bytes"
-    try:
-        with open(cgroup_path, "r") as f:
-            mem_bytes = int(f.read().strip())
-            # Some systems report a huge number when no limit is set
-            if mem_bytes < 1 << 50:  # Filter out values >1PB
-                return mem_bytes
-    except FileNotFoundError:
-        pass
-
-    # 3. SLURM memory allocation
-    mem_per_node = os.environ.get("SLURM_MEM_PER_NODE")  # in MB
-    if mem_per_node:
-        try:
-            return int(mem_per_node) * 1024**2  # MB → bytes
-        except ValueError:
-            pass
-
-    mem_per_cpu = os.environ.get("SLURM_MEM_PER_CPU")  # in MB
-    cpus = os.environ.get("SLURM_JOB_CPUS_PER_NODE")
-    if mem_per_cpu and cpus:
-        try:
-            return int(mem_per_cpu) * int(cpus) * 1024**2  # MB → bytes
-        except ValueError:
-            pass
-
-    # 4. Fallback: system-wide total memory
+    probes = (_memory_from_co_env, _memory_from_cgroup, _memory_from_slurm)
+    for probe in probes:
+        result = probe()
+        if result is not None:
+            return result
     return psutil.virtual_memory().total
 
 
@@ -759,16 +807,13 @@ def print_system_information(logger: logging.Logger):
     logger.info(f"Assigned memory: {memory} GBs")
     logger.info(f"Computation ID: {os.environ.get('CO_COMPUTATION_ID')}")
     logger.info(f"Capsule ID: {os.environ.get('CO_CAPSULE_ID')}")
-    logger.info(
-        f"Is pipeline execution?: {bool(os.environ.get('AWS_BATCH_JOB_ID'))}"
-    )
+    logger.info(f"Is pipeline execution?: {bool(os.environ.get('AWS_BATCH_JOB_ID'))}")
     logger.info(f"Is pipeline execution in SLURM?: {bool(slurm_id)}")
     logger.info(f"SLURM ID: {slurm_id}")
     logger.info(f"SLURM GPUs: {os.environ.get('SLURM_JOB_GPUS')}")
     logger.info(f"SLURM CPUs: {os.environ.get('SLURM_JOB_CPUS_PER_NODE')}")
-    logger.info(
-        f"SLURM variables {[( k, v ) for k, v in os.environ.items() if 'SLURM' in k]}"
-    )
+    slurm_vars = [(k, v) for k, v in os.environ.items() if "SLURM" in k]
+    logger.info(f"SLURM variables {slurm_vars}")
 
     logger.info(f"{sep} System Information {sep}")
     uname = platform.uname()
@@ -783,9 +828,8 @@ def print_system_information(logger: logging.Logger):
     logger.info(f"{sep} Boot Time {sep}")
     boot_time_timestamp = psutil.boot_time()
     bt = datetime.fromtimestamp(boot_time_timestamp)
-    logger.info(
-        f"Boot Time: {bt.year}/{bt.month}/{bt.day} {bt.hour}:{bt.minute}:{bt.second}"
-    )
+    boot_time_str = f"{bt.year}/{bt.month}/{bt.day} {bt.hour}:{bt.minute}:{bt.second}"
+    logger.info(f"Boot Time: {boot_time_str}")
 
     # CPU info
     logger.info(f"{sep} CPU Info {sep}")
@@ -801,9 +845,7 @@ def print_system_information(logger: logging.Logger):
 
     # CPU usage
     logger.info("CPU Usage Per Core before processing:")
-    for i, percentage in enumerate(
-        psutil.cpu_percent(percpu=True, interval=1)
-    ):
+    for i, percentage in enumerate(psutil.cpu_percent(percpu=True, interval=1)):
         logger.info(f"Core {i}: {percentage}%")
     logger.info(f"Total CPU Usage: {psutil.cpu_percent()}%")
 

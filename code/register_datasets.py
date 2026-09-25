@@ -35,9 +35,7 @@ def execute_command_helper(command: str, print_command: bool = False) -> None:
     if print_command:
         print(command)
 
-    popen = subprocess.Popen(
-        command, stdout=subprocess.PIPE, universal_newlines=True, shell=True
-    )
+    popen = subprocess.Popen(command, stdout=subprocess.PIPE, universal_newlines=True, shell=True)
     for stdout_line in iter(popen.stdout.readline, ""):
         yield str(stdout_line).strip()
     popen.stdout.close()
@@ -57,22 +55,11 @@ def register_datasets(path_to_datasets: str):
         Path to the folder where the datasets
         are located
     """
-    # flake8: noqa: W605
-    date_structure = (
-        "(20\d{2}-(\d\d{1})-(\d\d{1}))(_|-)((\d{2})-(\d{2})-(\d{2}))"
-    )
-
-    smartspim_id = "SmartSPIM_(\d{7}|\d{6})"
-    smartspim_id_regex = "({})".format(smartspim_id)
-
-    smartspim_str = f"{smartspim_id}_{date_structure}_(stitched|processed)_{date_structure}"
-    smartspim_processed_regex = "({})".format(smartspim_str)
-
     datasets = [
         dataset
-        for dataset in os.listdir(path)
+        for dataset in os.listdir(path_to_datasets)
         if os.path.isdir(f"{path_to_datasets}{dataset}")
-    ]  # re.match(smartspim_processed_regex, dataset)
+    ]
     n_datasets = len(datasets)
     logger.info(f"Datasets: {datasets} - len: {n_datasets}")
 
@@ -83,9 +70,7 @@ def register_datasets(path_to_datasets: str):
             for out in execute_command_helper(cmd):
                 logger.info(out)
         except ValueError as err:
-            logger.error(
-                f"An error occured while executing {dataset} err: {err}"
-            )
+            logger.error(f"An error occured while executing {dataset} err: {err}")
 
 
 if __name__ == "__main__":

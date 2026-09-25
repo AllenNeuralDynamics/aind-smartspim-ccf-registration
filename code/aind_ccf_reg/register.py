@@ -8,51 +8,63 @@ Pipeline:
 (4) register CCF annotation to brain space
 """
 
+from __future__ import annotations
+
 import logging
-import multiprocessing
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, Hashable, List, Sequence, Tuple, Union
+from typing import List, Optional, Tuple
 
 import ants
-import dask
 import dask.array as da
 import numpy as np
-import xarray_multiscale
 import zarr
-from aicsimageio.types import PhysicalPixelSizes
-from aicsimageio.writers import OmeZarrWriter
-from aind_data_schema.core.processing import DataProcess, ProcessName
+from aind_data_schema.components.identifiers import Code
+from aind_data_schema.core.processing import (
+    DataProcess,
+    ProcessName,
+    ProcessStage,
+)
 from argschema import ArgSchemaParser
-from dask.distributed import Client, LocalCluster, performance_report
-from distributed import wait
 from numcodecs import blosc
 
-from .__init__ import __version__
+from .__init__ import (
+    __maintainers__,
+    __pipeline_name__,
+    __pipeline_version__,
+    __title__,
+    __url__,
+    __version__,
+)
 from .utils import get_cpu_limit
+from .zarr_writer.zarr_writer import zarr_writer
 
 blosc.use_threads = False
 
 from aind_ccf_reg.configs import VMAX, VMIN, ArrayLike, PathLike, RegSchema
 from aind_ccf_reg.plots import plot_antsimgs, plot_reg
-from aind_ccf_reg.preprocess import (Preprocess, invert_perc_normalization,
-                                     perc_normalization, write_and_plot_image)
-from aind_ccf_reg.utils import (check_orientation, create_folder,
-                                create_precomputed, generate_processing,
-                                rotate_image)
+from aind_ccf_reg.preprocess import (
+    Preprocess,
+    invert_perc_normalization,
+    perc_normalization,
+    write_and_plot_image,
+)
+from aind_ccf_reg.utils import (
+    ResourceMonitor,
+    check_orientation,
+    create_folder,
+    create_precomputed,
+    generate_processing,
+    rotate_image,
+)
 
-LOG_FMT = "%(asctime)s %(message)s"
-LOG_DATE_FMT = "%Y-%m-%d %H:%M"
-
-logging.basicConfig(format=LOG_FMT, datefmt=LOG_DATE_FMT)
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
 
 
 def pad_array_n_d(arr: ArrayLike, dim: int = 5) -> ArrayLike:
     """
-    Pads a daks array to be in a 5D shape.
+    Pads a dask array to be in a 5D shape.
     Parameters
     ------------------------
     arr: ArrayLike
@@ -70,66 +82,6 @@ def pad_array_n_d(arr: ArrayLike, dim: int = 5) -> ArrayLike:
     while arr.ndim < dim:
         arr = arr[np.newaxis, ...]
     return arr
-
-
-def compute_pyramid(
-    data: dask.array.core.Array,
-    n_lvls: int,
-    scale_axis: Tuple[int],
-    chunks: Union[str, Sequence[int], Dict[Hashable, int]] = "auto",
-) -> List[dask.array.core.Array]:
-    """
-    Computes the pyramid levels given an input full resolution image data
-    Parameters
-    ------------------------
-    data: dask.array.core.Array
-        Dask array of the image data
-    n_lvls: int
-        Number of downsampling levels
-        that will be applied to the original image
-    scale_axis: Tuple[int]
-        Scaling applied to each axis
-    chunks: Union[str, Sequence[int], Dict[Hashable, int]]
-        chunksize that will be applied to the multiscales
-        Default: "auto"
-    Returns
-    ------------------------
-    List[dask.array.core.Array]:
-        List with the downsampled image(s)
-    """
-
-    pyramid = xarray_multiscale.multiscale(
-        data,
-        xarray_multiscale.reducers.windowed_mean,  # func
-        scale_axis,  # scale factors
-        preserve_dtype=True,
-        chunks=chunks,
-    )[:n_lvls]
-
-    return [arr.data for arr in pyramid]
-
-
-def get_pyramid_metadata() -> dict:
-    """
-    Gets pyramid metadata in OMEZarr format
-    Returns
-    ------------------------
-    dict:
-        Dictionary with the downscaling OMEZarr metadata
-    """
-
-    return {
-        "metadata": {
-            "description": """Downscaling implementation based on the
-                windowed mean of the original array""",
-            "method": "xarray_multiscale.reducers.windowed_mean",
-            "version": str(xarray_multiscale.__version__),
-            "args": "[false]",
-            # No extra parameters were used different
-            # from the orig. array and scales
-            "kwargs": {},
-        }
-    }
 
 
 class Register(ArgSchemaParser):
@@ -208,9 +160,7 @@ class Register(ArgSchemaParser):
             logger.info(f"Plot registration results: {figpath}")
 
             if np.any(ants_moving.direction != ants_fixed.direction):
-                logger.info(
-                    "Reorient moving image direction to fixed image direction ..."
-                )
+                logger.info("Reorient moving image direction to fixed image direction ...")
                 ants_moving = ants.reorient_image2(
                     ants_moving, orientation=ants.get_orientation(ants_fixed)
                 )
@@ -281,9 +231,7 @@ class Register(ArgSchemaParser):
             "total_sigma": 0.0,
         }
 
-        logger.info(
-            f"Computing rigid registration with parameters: {registration_params}"
-        )
+        logger.info(f"Computing rigid registration with parameters: {registration_params}")
         rigid_reg = ants.registration(**registration_params)
         end_time = datetime.now()
         logger.info(
@@ -322,9 +270,7 @@ class Register(ArgSchemaParser):
             "verbose": True,
             "mask_all_stages": True,
         }
-        logger.info(
-            f"Computing affine registration with parameters: {affine_registration_params}"
-        )
+        logger.info(f"Computing affine registration with parameters: {affine_registration_params}")
         affine_reg = ants.registration(**affine_registration_params)
 
         end_time = datetime.now()
@@ -373,9 +319,7 @@ class Register(ArgSchemaParser):
             "verbose": True,
         }
 
-        logger.info(
-            f"Computing SyN registration with parameters: {registration_params}"
-        )
+        logger.info(f"Computing SyN registration with parameters: {registration_params}")
         reg = ants.registration(**registration_params)
         end_time = datetime.now()
         logger.info(
@@ -412,9 +356,7 @@ class Register(ArgSchemaParser):
             deformed image
         """
         logger.info("Start registering to CCF ....")
-        logger.info(
-            f"Register to CCF with: {self.args['template_to_ccf_transform_path']}"
-        )
+        logger.info(f"Register to CCF with: {self.args['template_to_ccf_transform_path']}")
 
         # for visualizing registration results
         ants_fixed, percentile_values = perc_normalization(ants_fixed)
@@ -442,9 +384,7 @@ class Register(ArgSchemaParser):
 
         return ants_moved
 
-    def atlas_alignment(
-        self, img_array: np.array, ants_params: dict
-    ) -> Tuple[np.array, List]:
+    def atlas_alignment(self, img_array: np.array, ants_params: dict) -> Tuple[np.array, List]:
         """
         Register an lightsheet volume to the CCF Allen atlas via the SPIM template
 
@@ -476,11 +416,9 @@ class Register(ArgSchemaParser):
         ants_template = ants.image_read(
             os.path.abspath(self.args["template_path"])
         )  # SPIM template
-        ants_ccf = ants.image_read(
-            os.path.abspath(self.args["ccf_reference_path"])
-        )  # CCF template
-        logger.info(f"Loaded SPIM template {ants_template}")
-        logger.info(f"Loaded CCF template {ants_ccf}")
+        ants_ccf = ants.image_read(os.path.abspath(self.args["ccf_reference_path"]))  # CCF template
+        logger.debug(f"Loaded SPIM template {ants_template}")
+        logger.debug(f"Loaded CCF template {ants_ccf}")
 
         # ----------------------------------#
         # orient data to SPIM template's direction
@@ -508,7 +446,7 @@ class Register(ArgSchemaParser):
         ants_img.set_direction(ants_template.direction)
         ants_img.set_origin(ants_template.origin)
 
-        logger.info(f"Input image info: {ants_img}")
+        logger.debug(f"Input image info: {ants_img}")
 
         write_and_plot_image(
             ants_img,
@@ -521,21 +459,17 @@ class Register(ArgSchemaParser):
         # ----------------------------------#
         # run preprocessing on raw data
         # ----------------------------------#
-        logger.info(f"{'=='*40}")
         logger.info("Start preprocessing....")
-        logger.info(f"{'=='*40}")
 
         prep = Preprocess(self.args, ants_img, ants_template)
         ants_img, percentile_values = prep.run()
-        logger.info(f"Preprocessed input data {ants_img}")
+        logger.debug(f"Preprocessed input data {ants_img}")
         logger.info(f"percentile values: {percentile_values}")
 
         # ----------------------------------#
         # register brain image to template
         # ----------------------------------#
-        logger.info(f"{'=='*40}")
         logger.info("Start registering brain image to template....")
-        logger.info(f"{'=='*40}")
 
         # ants_img = ants.image_read(self.args["prep_params"].get("percNorm_path")) #
 
@@ -545,9 +479,7 @@ class Register(ArgSchemaParser):
         # ----------------------------------#
         # register brain image to CCF
         # ----------------------------------#
-        logger.info(f"{'=='*40}")
         logger.info("Start registering brain image to CCF....")
-        logger.info(f"{'=='*40}")
 
         # aligned_image = ants.image_read(self.args["ants_params"].get("moved_to_template_path")) #
 
@@ -557,9 +489,7 @@ class Register(ArgSchemaParser):
         # ----------------------------------#
         # register CCF annotation to brain space
         # ----------------------------------#
-        logger.info(f"{'=='*40}")
         logger.info("Start registering CCF annotation to brain space....")
-        logger.info(f"{'=='*40}")
 
         ccf_anno_to_template_deformed = ants.image_read(
             self.args["ccf_annotation_to_template_moved_path"]
@@ -588,9 +518,7 @@ class Register(ArgSchemaParser):
 
         return aligned_image.numpy(), percentile_values
 
-    def reverse_atlas_alignment(
-        self, img_array: np.array, ants_params: dict, ccf_type: str
-    ):
+    def reverse_atlas_alignment(self, img_array: np.array, ants_params: dict, ccf_type: str):
         """
         Takes the CCF template and registers it back into the image's
         original space
@@ -622,29 +550,23 @@ class Register(ArgSchemaParser):
         )  # SPIM template
 
         if ccf_type == "reference":
-            ants_ccf = ants.image_read(
-                os.path.abspath(self.args["ccf_reference_path"])
-            )
+            ants_ccf = ants.image_read(os.path.abspath(self.args["ccf_reference_path"]))
             interpolator = "linear"
         elif ccf_type == "annotation":
-            ants_ccf = ants.image_read(
-                os.path.abspath(self.args["ccf_annotation_path"])
-            )
+            ants_ccf = ants.image_read(os.path.abspath(self.args["ccf_annotation_path"]))
             interpolator = "genericLabel"
         else:
             raise ValueError(
                 f"{ccf_type} is not a known CCF type. Options are 'reference' or 'annotation'"
             )
 
-        logger.info(f"Loaded SPIM template {ants_template}")
-        logger.info(f"Loaded CCF template {ants_ccf}")
+        logger.debug(f"Loaded SPIM template {ants_template}")
+        logger.debug(f"Loaded CCF template {ants_ccf}")
 
         # ----------------------------------#
         # register CCF to template space
         # ----------------------------------#
-        logger.info(f"{'=='*40}")
         logger.info("Start registering CCF to template space....")
-        logger.info(f"{'=='*40}")
 
         # apply transform
         aligned_image = ants.apply_transforms(
@@ -657,9 +579,7 @@ class Register(ArgSchemaParser):
         # ----------------------------------#
         # register CCF in template space to brain space
         # ----------------------------------#
-        logger.info(f"{'=='*40}")
         logger.info("Start registering CCF from template to brain space....")
-        logger.info(f"{'=='*40}")
 
         template_to_brain_transform_path = [
             f"{self.args['results_folder']}/ls_to_template_SyN_0GenericAffine.mat",
@@ -738,9 +658,7 @@ class Register(ArgSchemaParser):
         # ----------------------------------#
         # register CCF in template space to brain space
         # ----------------------------------#
-        logger.info(f"{'=='*40}")
         logger.info("Start registering CCF from template to brain space....")
-        logger.info(f"{'=='*40}")
 
         template_to_brain_transform_path = [
             f"{self.args['results_folder']}/ls_to_template_SyN_0GenericAffine.mat",
@@ -781,14 +699,10 @@ class Register(ArgSchemaParser):
         # because precomputed builds xyz nor zyx
         aligned_image_out = np.swapaxes(aligned_image_out, 0, 2)
 
-        visual_spacing = tuple(
-            [s * 10**6 for s in ants_params["spacing"][::-1]]
-        )
+        visual_spacing = tuple([s * 10**6 for s in ants_params["spacing"][::-1]])
 
         ng_params["scale_params"]["res"] = visual_spacing
-        ng_params["scale_params"]["dims"] = [
-            dim for dim in aligned_image_out.shape
-        ]
+        ng_params["scale_params"]["dims"] = [dim for dim in aligned_image_out.shape]
 
         seg = create_precomputed(ng_params)
         seg.create_segmentation_info()
@@ -827,11 +741,9 @@ class Register(ArgSchemaParser):
         ants_template = ants.image_read(
             os.path.abspath(self.args["template_path"])
         )  # SPIM template
-        ants_ccf = ants.image_read(
-            os.path.abspath(self.args["ccf_reference_path"])
-        )  # CCF template
-        logger.info(f"Loaded SPIM template {ants_template}")
-        logger.info(f"Loaded CCF template {ants_ccf}")
+        ants_ccf = ants.image_read(os.path.abspath(self.args["ccf_reference_path"]))  # CCF template
+        logger.debug(f"Loaded SPIM template {ants_template}")
+        logger.debug(f"Loaded CCF template {ants_ccf}")
 
         # ----------------------------------#
         # orient data to SPIM template's direction
@@ -890,6 +802,9 @@ class Register(ArgSchemaParser):
         output_path: PathLike,
         image_name: PathLike,
         opts: dict,
+        shard_size: Optional[Tuple[int, int, int]] = None,
+        chunk_size: Optional[Tuple[int, int, int]] = None,
+        scale_factor: Optional[Tuple[int, int, int]] = None,
     ):
         """
         Writes array to the OMEZarr format
@@ -912,88 +827,51 @@ class Register(ArgSchemaParser):
         opts: dict
             Dictionary with the storage
             options for the zarr image
+
+        shard_size: Optional[Tuple[int, int, int]]
+            Shard size per axis (ZYX) for the OMEZarr writer.
+            Defaults to (512, 512, 512) when None.
+
+        chunk_size: Optional[Tuple[int, int, int]]
+            Chunk size per axis (ZYX) for the OMEZarr writer.
+            Defaults to (128, 128, 128) when None.
+
+        scale_factor: Optional[Tuple[int, int, int]]
+            Downsampling factor per axis (ZYX) for the
+            multiresolution pyramid. Defaults to (2, 2, 2) when None.
         """
 
-        dask_folder = Path("../scratch")
-        # Setting dask configuration
-        dask.config.set(
-            {
-                "temporary-directory": dask_folder,
-                "local_directory": dask_folder,
-                "tcp-timeout": "300s",
-                "array.chunk-size": "384MiB",
-                "distributed.comm.timeouts": {
-                    "connect": "300s",
-                    "tcp": "300s",
-                },
-                "distributed.scheduler.bandwidth": 100000000,
-                "distributed.worker.memory.rebalance.measure": "optimistic",
-                "distributed.worker.memory.target": False,
-                "distributed.worker.memory.spill": 0.92,
-                "distributed.worker.memory.pause": 0.95,
-                "distributed.worker.memory.terminate": 0.98,
-            }
+        if shard_size is None:
+            shard_size = (512, 512, 512)
+
+        if chunk_size is None:
+            chunk_size = (128, 128, 128)
+
+        if scale_factor is None:
+            scale_factor = (2, 2, 2)
+
+        # Padding to 5D if necessary
+        img_array = pad_array_n_d(img_array)
+
+        # If dask array, perform compute before writing
+        if isinstance(img_array, da.core.Array):
+            img_array = img_array.compute()
+
+        zarr_writer(
+            image_data=img_array,
+            output_path=output_path,
+            voxel_size=physical_pixel_sizes,
+            shard_size=list(shard_size),
+            chunk_size=list(chunk_size),
+            scale_factor=list(scale_factor),
+            n_lvls=self.args["OMEZarr_params"]["n_lvls"],
+            channel_name=self.args["input_channel"],
+            logger=logger,
+            stack_name=image_name,
+            compressor_kwargs=opts,
+            downsample_mode="mean",
+            bucket_name=None,
         )
-
-        physical_pixels = PhysicalPixelSizes(
-            physical_pixel_sizes[0],
-            physical_pixel_sizes[1],
-            physical_pixel_sizes[2],
-        )
-
-        scale_axis = [2, 2, 2]
-        pyramid_data = compute_pyramid(
-            img_array,
-            -1,
-            scale_axis,
-            self.args["OMEZarr_params"]["chunks"],
-        )
-
-        pyramid_data = [pad_array_n_d(pyramid) for pyramid in pyramid_data]
-        logger.info(f"Pyramid {pyramid_data}")
-
-        # Writing OMEZarr image
-
-        # Pulling number of available workers in Code Ocean or SLURM
-        n_workers = int(get_cpu_limit())
-
-        threads_per_worker = 1
-        # Using 1 thread since is in single machine.
-        # Avoiding the use of multithreaded due to GIL
-
-        cluster = LocalCluster(
-            n_workers=n_workers,
-            threads_per_worker=threads_per_worker,
-            processes=True,
-            memory_limit="auto",
-        )
-        client = Client(cluster)
-
-        writer = OmeZarrWriter(output_path)
-
-        dask_report_file = Path(self.args["metadata_folder"]).joinpath(
-            "dask_report.html"
-        )
-
-        with performance_report(filename=dask_report_file):
-            dask_jobs = writer.write_multiscale(
-                pyramid=pyramid_data,
-                image_name=image_name,
-                chunks=pyramid_data[0].chunksize,
-                physical_pixel_sizes=physical_pixels,
-                channel_names=None,
-                channel_colors=None,
-                scale_factor=scale_axis,
-                storage_options=opts,
-                compute_dask=False,
-                **get_pyramid_metadata(),
-            )
-
-            if len(dask_jobs):
-                dask_jobs = dask.persist(*dask_jobs)
-                wait(dask_jobs)
-
-        client.shutdown()
 
     def run(self) -> str:
         """
@@ -1003,16 +881,14 @@ class Register(ArgSchemaParser):
         input_data_path = os.path.abspath(self.args["input_data"])
         output_data_path = os.path.abspath(self.args["output_data"])
         metadata_path = os.path.abspath(self.args["metadata_folder"])
-        reg_folder = os.path.abspath(
-            self.args["reg_folder"]
-        )  # save registration results
+        reg_folder = os.path.abspath(self.args["reg_folder"])  # save registration results
         # input_data_path = glob(f"{input_data_path}_stitched_*/")[0]
 
         logger.info(
             f"Input data: {input_data_path}\nOutput data: {output_data_path}\nMetadata path: {metadata_path}"
         )
 
-        logger.info(f"Regsitration results save to: {reg_folder}")
+        logger.info(f"Registration results save to: {reg_folder}")
 
         create_folder(output_data_path)
 
@@ -1027,11 +903,7 @@ class Register(ArgSchemaParser):
 
         if not os.path.isdir(str(image_path)):
             root_path = Path(input_data_path)
-            channels = [
-                folder
-                for folder in os.listdir(root_path)
-                if folder != ".zgroup"
-            ]
+            channels = [folder for folder in os.listdir(root_path) if folder != ".zgroup"]
 
             selected_channel = channels[0]
 
@@ -1039,32 +911,38 @@ class Register(ArgSchemaParser):
                 f"""Directory {image_path} does not exist!
                 Setting registration to the first available channel: {selected_channel}"""
             )
-            image_path = root_path.joinpath(
-                f"{selected_channel}/{self.args['input_scale']}"
-            )
+            image_path = root_path.joinpath(f"{selected_channel}/{self.args['input_scale']}")
 
-        start_date_time = datetime.now()
+        reg_channel = self.args["input_channel"]
+        cpu_cores = int(get_cpu_limit())
+
+        start_date_time = datetime.now(timezone.utc)
+        resource_monitor = ResourceMonitor(interval_seconds=30.0).start()
         img_array = self.__read_zarr_image(image_path)
-        end_date_time = datetime.now()
+        resource_monitor.stop()
+        end_date_time = datetime.now(timezone.utc)
 
         data_processes.append(
             DataProcess(
-                name=ProcessName.IMAGE_IMPORTING,
-                software_version=__version__,
+                process_type=ProcessName.IMAGE_IMPORTING,
+                name=f"Image importing - {reg_channel}",
+                stage=ProcessStage.PROCESSING,
+                code=Code(url=__url__, name=__title__, version=__version__),
+                experimenters=__maintainers__,
+                pipeline_name=__pipeline_name__,
                 start_date_time=start_date_time,
                 end_date_time=end_date_time,
-                input_location=str(image_path),
-                output_location=str(image_path),
-                outputs={},
-                code_url=self.args["code_url"],
-                code_version=__version__,
-                parameters={},
+                output_path=str(image_path),
+                output_parameters={
+                    "input_location": str(image_path),
+                    "duration_seconds": (end_date_time - start_date_time).total_seconds(),
+                },
+                resources=resource_monitor.to_resource_usage(cpu_cores=cpu_cores),
                 notes="Importing fused data for alignment",
             )
         )
 
         # Atlas alignment
-        start_date_time = datetime.now()
         ants_params = self.args["ants_params"]
         ants_params["new_spacing"] = (
             self.args["reference_res"],
@@ -1072,62 +950,61 @@ class Register(ArgSchemaParser):
             self.args["reference_res"],
         )
 
-        aligned_image, percentile_values = self.atlas_alignment(
-            img_array, ants_params
-        )
-        no_norm_aligned_image = invert_perc_normalization(
-            aligned_image, percentile_values
-        )
-
-        end_date_time = datetime.now()
+        start_date_time = datetime.now(timezone.utc)
+        resource_monitor = ResourceMonitor(interval_seconds=30.0).start()
+        aligned_image, percentile_values = self.atlas_alignment(img_array, ants_params)
+        no_norm_aligned_image = invert_perc_normalization(aligned_image, percentile_values)
+        resource_monitor.stop()
+        end_date_time = datetime.now(timezone.utc)
 
         data_processes.append(
             DataProcess(
-                name=ProcessName.IMAGE_ATLAS_ALIGNMENT,
-                software_version=__version__,
+                process_type=ProcessName.IMAGE_ATLAS_ALIGNMENT,
+                name=f"Atlas alignment (LS -> template -> CCF) - {reg_channel}",
+                stage=ProcessStage.PROCESSING,
+                code=Code(
+                    url="https://github.com/ANTsX/ANTs",
+                    name="ANTs",
+                    version=ants.__version__,
+                ),
+                experimenters=__maintainers__,
+                pipeline_name=__pipeline_name__,
                 start_date_time=start_date_time,
                 end_date_time=end_date_time,
-                input_location=str(image_path),
-                output_location=str(reg_folder),
-                outputs={},
-                code_url="https://github.com/ANTsX/ANTs",
-                code_version=ants.__version__,
-                parameters=ants_params,
+                output_path=str(reg_folder),
+                output_parameters={
+                    "input_location": str(image_path),
+                    "parameters": ants_params,
+                    "duration_seconds": (end_date_time - start_date_time).total_seconds(),
+                },
+                resources=resource_monitor.to_resource_usage(cpu_cores=cpu_cores),
                 notes="Template based registration: LS -> template -> Allen CCFv3 Atlas",
             )
         )
 
-        start_date_time = datetime.now()
+        start_date_time = datetime.now(timezone.utc)
+        resource_monitor = ResourceMonitor(interval_seconds=30.0).start()
         image_name = "image.zarr"
 
+        # Blosc codec configuration for the tensorstore Zarr v3 writer.
+        # This dict is passed straight into the zarr3 "blosc" codec config,
+        # so it must use tensorstore's keys (cname/clevel/shuffle), not a
+        # numcodecs Blosc object.
         opts = {
-            "compressor": blosc.Blosc(
-                cname=self.args["OMEZarr_params"]["compressor"],
-                clevel=self.args["OMEZarr_params"]["clevel"],
-                shuffle=blosc.SHUFFLE,
-            )
+            "cname": self.args["OMEZarr_params"]["compressor"],
+            "clevel": self.args["OMEZarr_params"]["clevel"],
+            "shuffle": "shuffle",
         }
 
         aligned_image_dask = da.from_array(no_norm_aligned_image)
-        print(
-            "Before changing orientation: ",
-            aligned_image_dask.shape,
-            " DR: ",
-            no_norm_aligned_image.min(),
-            no_norm_aligned_image.max(),
+        logger.debug(f"Aligned image shape: {aligned_image_dask.shape}")
+        logger.debug(f"Aligned image dtype: {aligned_image_dask.dtype}")
+        logger.debug(
+            f"Dynamic range of unaligned image: {no_norm_aligned_image.min()} - {no_norm_aligned_image.max()}"
         )
-        aligned_image_dask = da.moveaxis(
-            aligned_image_dask, [0, 1, 2], [2, 1, 0]
-        )
-        print(
-            "After changing orientation: ",
-            aligned_image_dask.shape,
-            " DR: ",
-            no_norm_aligned_image.min(),
-            no_norm_aligned_image.max(),
-            aligned_image_dask.dtype,
-            no_norm_aligned_image.dtype,
-        )
+
+        aligned_image_dask = da.moveaxis(aligned_image_dask, [0, 1, 2], [2, 1, 0])
+        logger.debug(f"After moveaxis, aligned image shape: {aligned_image_dask.shape}")
 
         self.write_zarr(
             img_array=aligned_image_dask,  # dask array
@@ -1135,60 +1012,72 @@ class Register(ArgSchemaParser):
             output_path=output_data_path,
             image_name=image_name,
             opts=opts,
+            shard_size=self.args["OMEZarr_params"].get("shard_size"),
+            chunk_size=self.args["OMEZarr_params"].get("chunk_size"),
+            scale_factor=self.args["OMEZarr_params"].get("scale_factor"),
         )
-        end_date_time = datetime.now()
+        resource_monitor.stop()
+        end_date_time = datetime.now(timezone.utc)
 
         data_processes.append(
             DataProcess(
-                name=ProcessName.FILE_FORMAT_CONVERSION,
-                software_version=__version__,
+                process_type=ProcessName.FILE_FORMAT_CONVERSION,
+                name=f"OMEZarr conversion - {reg_channel}",
+                stage=ProcessStage.PROCESSING,
+                code=Code(url=__url__, name=__title__, version=__version__),
+                experimenters=__maintainers__,
+                pipeline_name=__pipeline_name__,
                 start_date_time=start_date_time,
                 end_date_time=end_date_time,
-                input_location="In memory array",
-                output_location=str(
-                    Path(output_data_path).joinpath(image_name)
-                ),
-                outputs={},
-                code_url=self.args["code_url"],
-                code_version=__version__,
-                parameters={
-                    "pixel_sizes": ants_params["new_spacing"],
-                    "OMEZarr_params": self.args["OMEZarr_params"],
+                output_path=str(Path(output_data_path).joinpath(image_name)),
+                output_parameters={
+                    "input_location": "In memory array",
+                    "parameters": {
+                        "pixel_sizes": ants_params["new_spacing"],
+                        "OMEZarr_params": self.args["OMEZarr_params"],
+                    },
+                    "duration_seconds": (end_date_time - start_date_time).total_seconds(),
                 },
+                resources=resource_monitor.to_resource_usage(cpu_cores=cpu_cores),
                 notes="Converting registered image to OMEZarr",
             )
         )
 
         # reverse transform annotation map
-        self.reverse_annotation_alignment(
-            img_array, ants_params, self.args["ng_params"]
-        )
-
-        end_date_time = datetime.now()
+        start_date_time = datetime.now(timezone.utc)
+        resource_monitor = ResourceMonitor(interval_seconds=30.0).start()
+        self.reverse_annotation_alignment(img_array, ants_params, self.args["ng_params"])
+        resource_monitor.stop()
+        end_date_time = datetime.now(timezone.utc)
 
         data_processes.append(
             DataProcess(
-                name=ProcessName.IMAGE_ATLAS_ALIGNMENT,
-                software_version=__version__,
+                process_type=ProcessName.IMAGE_ATLAS_ALIGNMENT,
+                name=f"Reverse annotation alignment (CCF -> LS) - {reg_channel}",
+                stage=ProcessStage.PROCESSING,
+                code=Code(
+                    url="https://github.com/ANTsX/ANTs",
+                    name="ANTs",
+                    version=ants.__version__,
+                ),
+                experimenters=__maintainers__,
+                pipeline_name=__pipeline_name__,
                 start_date_time=start_date_time,
                 end_date_time=end_date_time,
-                input_location=str(image_path),
-                output_location="In memory array",
-                outputs={},
-                code_url="https://github.com/ANTsX/ANTs",
-                code_version=ants.__version__,
-                parameters=ants_params,
+                output_path=str(image_path),
+                output_parameters={
+                    "input_location": str(image_path),
+                    "parameters": ants_params,
+                    "duration_seconds": (end_date_time - start_date_time).total_seconds(),
+                },
+                resources=resource_monitor.to_resource_usage(cpu_cores=cpu_cores),
                 notes="Template based reversed registration: annotations in template space -> LS",
             )
         )
 
         # registers segmented channels to CCF
         for channel in self.args["additional_channels"]:
-            start_date_time = datetime.now()
-
-            output_data_path = os.path.abspath(
-                f"../results/ccf_{channel}/OMEZarr"
-            )
+            output_data_path = os.path.abspath(f"../results/ccf_{channel}/OMEZarr")
             create_folder(output_data_path)
 
             image_path = Path(input_data_path).joinpath(
@@ -1197,53 +1086,44 @@ class Register(ArgSchemaParser):
 
             logger.info(f"Going to read zarr: {image_path}")
 
+            start_date_time = datetime.now(timezone.utc)
+            resource_monitor = ResourceMonitor(interval_seconds=30.0).start()
             img_array = self.__read_zarr_image(image_path)
 
-            aligned_image = self.additional_channel_alignment(
-                img_array, ants_params
-            )
-
-            end_date_time = datetime.now()
+            aligned_image = self.additional_channel_alignment(img_array, ants_params)
+            resource_monitor.stop()
+            end_date_time = datetime.now(timezone.utc)
 
             data_processes.append(
                 DataProcess(
-                    name=ProcessName.IMAGE_ATLAS_ALIGNMENT,
-                    software_version=__version__,
+                    process_type=ProcessName.IMAGE_ATLAS_ALIGNMENT,
+                    name=f"Atlas alignment using transforms - {channel}",
+                    stage=ProcessStage.PROCESSING,
+                    code=Code(
+                        url="https://github.com/ANTsX/ANTs",
+                        name="ANTs",
+                        version=ants.__version__,
+                    ),
+                    experimenters=__maintainers__,
+                    pipeline_name=__pipeline_name__,
                     start_date_time=start_date_time,
                     end_date_time=end_date_time,
-                    input_location=str(image_path),
-                    output_location="In memory array",
-                    outputs={},
-                    code_url="https://github.com/ANTsX/ANTs",
-                    code_version=ants.__version__,
-                    parameters=ants_params,
+                    output_path=str(image_path),
+                    output_parameters={
+                        "input_location": str(image_path),
+                        "parameters": ants_params,
+                        "duration_seconds": (end_date_time - start_date_time).total_seconds(),
+                    },
+                    resources=resource_monitor.to_resource_usage(cpu_cores=cpu_cores),
                     notes=f"Template based registration using transforms: {channel}",
                 )
             )
 
-            start_date_time = datetime.now()
+            start_date_time = datetime.now(timezone.utc)
+            resource_monitor = ResourceMonitor(interval_seconds=30.0).start()
             aligned_image_dask = da.from_array(aligned_image)
 
-            print(
-                "Before changing orientation: ",
-                aligned_image_dask.shape,
-                " DR: ",
-                aligned_image.min(),
-                aligned_image.max(),
-            )
-
-            aligned_image_dask = da.moveaxis(
-                aligned_image_dask, [0, 1, 2], [2, 1, 0]
-            )
-            print(
-                "After changing orientation: ",
-                aligned_image_dask.shape,
-                " DR: ",
-                aligned_image.min(),
-                aligned_image.max(),
-                aligned_image_dask.dtype,
-                aligned_image.dtype,
-            )
+            aligned_image_dask = da.moveaxis(aligned_image_dask, [0, 1, 2], [2, 1, 0])
 
             self.write_zarr(
                 img_array=aligned_image_dask,  # dask array
@@ -1251,27 +1131,33 @@ class Register(ArgSchemaParser):
                 output_path=output_data_path,
                 image_name=image_name,
                 opts=opts,
+                shard_size=self.args["OMEZarr_params"].get("shard_size"),
+                chunk_size=self.args["OMEZarr_params"].get("chunk_size"),
+                scale_factor=self.args["OMEZarr_params"].get("scale_factor"),
             )
-
-            end_date_time = datetime.now()
+            resource_monitor.stop()
+            end_date_time = datetime.now(timezone.utc)
 
             data_processes.append(
                 DataProcess(
-                    name=ProcessName.FILE_FORMAT_CONVERSION,
-                    software_version=__version__,
+                    process_type=ProcessName.FILE_FORMAT_CONVERSION,
+                    name=f"OMEZarr conversion - {channel}",
+                    stage=ProcessStage.PROCESSING,
+                    code=Code(url=__url__, name=__title__, version=__version__),
+                    experimenters=__maintainers__,
+                    pipeline_name=__pipeline_name__,
                     start_date_time=start_date_time,
                     end_date_time=end_date_time,
-                    input_location="In memory array",
-                    output_location=str(
-                        Path(output_data_path).joinpath(image_name)
-                    ),
-                    outputs={},
-                    code_url=self.args["code_url"],
-                    code_version=__version__,
-                    parameters={
-                        "pixel_sizes": ants_params["new_spacing"],
-                        "OMEZarr_params": self.args["OMEZarr_params"],
+                    output_path=str(Path(output_data_path).joinpath(image_name)),
+                    output_parameters={
+                        "input_location": "In memory array",
+                        "parameters": {
+                            "pixel_sizes": ants_params["new_spacing"],
+                            "OMEZarr_params": self.args["OMEZarr_params"],
+                        },
+                        "duration_seconds": (end_date_time - start_date_time).total_seconds(),
                     },
+                    resources=resource_monitor.to_resource_usage(cpu_cores=cpu_cores),
                     notes=f"Converting registered image for channel {channel} to OMEZarr",
                 )
             )
@@ -1282,9 +1168,10 @@ class Register(ArgSchemaParser):
 
         generate_processing(
             data_processes=data_processes,
-            dest_processing=metadata_path,
-            processor_full_name="Di Wang, Camilo Laiton",
-            pipeline_version="1.6.0",
+            dest_processing=str(metadata_path),
+            pipeline_name=__pipeline_name__,
+            pipeline_version=__pipeline_version__,
+            pipeline_url=__url__,
         )
 
         return str(image_path)

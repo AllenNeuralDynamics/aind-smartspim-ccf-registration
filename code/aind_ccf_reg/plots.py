@@ -28,12 +28,8 @@ def plot_antsimgs(ants_img, figpath, title="", vmin=0, vmax=500):
         ants_img = ants_img.numpy()
         half_size = np.array(ants_img.shape) // 2
         fig, ax = plt.subplots(1, 3, figsize=(10, 6))
-        ax[0].imshow(
-            ants_img[half_size[0], :, :], cmap="gray", vmin=vmin, vmax=vmax
-        )
-        ax[1].imshow(
-            ants_img[:, half_size[1], :], cmap="gray", vmin=vmin, vmax=vmax
-        )
+        ax[0].imshow(ants_img[half_size[0], :, :], cmap="gray", vmin=vmin, vmax=vmax)
+        ax[1].imshow(ants_img[:, half_size[1], :], cmap="gray", vmin=vmin, vmax=vmax)
         im = ax[2].imshow(
             ants_img[
                 :,
@@ -45,15 +41,11 @@ def plot_antsimgs(ants_img, figpath, title="", vmin=0, vmax=500):
             vmax=vmax,
         )
         fig.suptitle(title, y=0.9)
-        plt.colorbar(
-            im, ax=ax.ravel().tolist(), fraction=0.1, pad=0.025, shrink=0.7
-        )
+        plt.colorbar(im, ax=ax.ravel().tolist(), fraction=0.1, pad=0.025, shrink=0.7)
         plt.savefig(figpath, bbox_inches="tight", pad_inches=0.1)
 
 
-def plot_reg(
-    moving, fixed, warped, figpath, title="", loc=0, vmin=0, vmax=1.5
-):
+def plot_reg(moving, fixed, warped, figpath, title="", loc=0, vmin=0, vmax=1.5):
     """
     Plot registration results: moving, fixed, deformed,
     overlay and difference images after registration
@@ -77,9 +69,7 @@ def plot_reg(
     """
 
     if loc >= len(moving.shape):
-        raise ValueError(
-            f"loc {loc} is not allowed, should less than {len(moving.shape)}"
-        )
+        raise ValueError(f"loc {loc} is not allowed, should less than {len(moving.shape)}")
 
     half_size_moving = np.array(moving.shape) // 2
     half_size_fixed = np.array(fixed.shape) // 2
@@ -102,9 +92,7 @@ def plot_reg(
         warped = np.rot90(np.fliplr(warped.view()[:, :, half_size_warped[2]]))
         y = 0.82
     else:
-        raise ValueError(
-            f"loc {loc} is not allowed. Allowed values are: 0, 1, 2"
-        )
+        raise ValueError(f"loc {loc} is not allowed. Allowed values are: 0, 1, 2")
 
     # combine deformed and fixed images to an RGB image
     overlay = np.stack((warped, fixed, warped), axis=2)
